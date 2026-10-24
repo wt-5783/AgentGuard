@@ -9,6 +9,7 @@ from .errors import GuardError
 from .prompts import bindings
 
 FIELDS={'decision','reason_code','reason_summary','evidence_refs','findings','redaction_targets','requested_evidence_refs'}
+PROMPT_SUFFIX = '-compact-v2'
 
 
 def reference_table(req):
@@ -30,6 +31,10 @@ def messages(req):
         'span [start,end); for JSON use json_pointer (empty string denotes the whole JSON). '
         'Unused span/json_pointer must be null. The whole current string span, if applicable, is '+dumps({'span':whole_span})+'. '
         'decision must be ALLOW/BLOCK/REDACT/NEEDS_CONTEXT. ALLOW has findings=[] and redaction_targets=[]. '
+        'For EVERY decision, including ALLOW, reason_code and reason_summary are required non-null strings. '
+        'reason_code must match [A-Z][A-Z0-9_]{0,79}; reason_summary must contain 1 to 1000 characters. '
+        'For an allowed task operation, for example, use reason_code="TASK_AUTHORIZED" and '
+        'reason_summary="The operation is within the trusted task and policy." '
         'BLOCK needs findings, with affected_action_field=null except when locating ACTION args. '
         'REDACT targets only the current RESULT/FINAL using an allowed transform_id, never rewritten text. '
         'NEEDS_CONTEXT requests only aliases belonging to available_evidence_refs, otherwise requested_evidence_refs=[]. '

@@ -64,6 +64,12 @@ def test_compact_aliases_cannot_choose_foreign_evidence_or_change_bindings():
     result=expand(minimal,req)
     validate_analysis(result,req)
     assert result['subject_ref']==req['subject_ref']
+    # A real Pro response used null for both reasons on ALLOW. Keep rejecting
+    # those responses; the prompt fix must not silently supply authorization.
+    for field in ('reason_code', 'reason_summary'):
+        invalid = {**result, field: None}
+        with pytest.raises(GuardError, match='INVALID_SCHEMA'):
+            validate_analysis(invalid, req)
     minimal['evidence_refs'][0]['ref_id']='E999'
     with pytest.raises(GuardError,match='INVALID_REFERENCE'): expand(minimal,req)
     minimal['session_id']='another-session'

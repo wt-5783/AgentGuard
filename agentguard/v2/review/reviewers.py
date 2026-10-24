@@ -105,9 +105,9 @@ class Reviewer:
         evidence_index(data)
         authorize_destination(data, self.client)
         compact = getattr(getattr(self.client, 'config', None), 'compact_protocol', False)
-        from .compact import messages as compact_messages, expand
+        from .compact import messages as compact_messages, expand, PROMPT_SUFFIX
         messages = compact_messages(data) if compact else review_messages(data)
-        prompt_version = PROMPT_VERSION + ('-compact-v1' if compact else '')
+        prompt_version = PROMPT_VERSION + (PROMPT_SUFFIX if compact else '')
         trace = {'request': data, 'binding': bindings(data), 'prompt_version': prompt_version,
                  'model': self.client.model, 'destination_id': self.client.destination_id,
                  'messages': messages, 'cache_hit': False, 'submitted': False}
