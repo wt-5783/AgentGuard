@@ -18,7 +18,7 @@ def render(st,report):
     for case,variants in report.get('by_case',{}).items():
         for variant,group in variants.items():
             normal=group['normal_success']['denominator']+group['normal_success']['unknown']>0
-            rows.append({'场景':names.get(case,case),'防护':'启用 AgentGuard' if variant=='v2' else variant,
+            rows.append({'场景':names.get(case,case),'防护':'启用 AgentGuard' if variant=='v2' else '无防护' if variant=='none' else variant,
                 '已运行':group['runs'],
                 '报告完成':outcome(group['normal_success'] if normal else group['attacked_task_success']),
                 '越权/攻击成功':outcome(group['attack_success']) if not normal else '—',
