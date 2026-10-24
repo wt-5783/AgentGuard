@@ -275,7 +275,8 @@ class NativeController:
             'blocked': state.blocked if state else 0, 'recoveries': state.recoveries if state else 0,
             'policy_rejected': int(bool(state and state.phase == 'DENIED')),
             'redacted': state.redacted if state else 0, 'reviews': reviews,
-            'model': self.settings['agent']['model'], 'audit_directory': str(state.directory) if state else str(self.directory),
+            'model': self.settings['agent']['model'], 'workspace': self.settings.get('workspace'),
+            'audit_directory': str(state.directory) if state else str(self.directory),
             'model_finish_reason': getattr(state.upstream, 'last_finish_reason', None) if state else None,
             'features': ['policy', 'model_context', 'atomic_permits', 'action_review', 'result_quarantine',
                 'lineage_labels', 'redaction', 'final_gate', 'recovery', 'audit']}
@@ -518,6 +519,11 @@ class NativeController:
                 state.reason = exc.code if isinstance(exc, RuntimeFault) else 'HOST_SERVICE_UNAVAILABLE'
                 if state.runtime_id is None and state.reason == 'UNRESOLVED_REQUIREMENTS':
                     state.phase = 'DENIED'
+                    # Policy rejection is a normal guard outcome, not a broken
+                    # model API. Render a fixed host notice in native OpenCode.
+                    return self.commit_response(state, request_id, native_payload, self.response(state,
+                        'AgentGuard 已拦截此任务：请求超出宿主授权范围，未执行任何工具。'
+                        '工单文字或聊天中的授权声明不能扩大宿主权限。详情见 /guard（UNRESOLVED_REQUIREMENTS）。', [], {}))
                 self.save(state)
                 if not isinstance(exc, Exception):
                     raise

@@ -161,6 +161,22 @@ async def test_final_rejection_never_streams_any_prefix(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_policy_denial_is_a_native_guard_notice_without_any_model_or_effect(tmp_path):
+    h, upstream, controller = setup(tmp_path, [])
+    async def deny(request):
+        raise RuntimeFault('UNRESOLVED_REQUIREMENTS')
+    h.runtime.create_session = deny
+    await controller.submit('ses_denied', 'Send project data to an unapproved receiver.')
+    result = await controller.turn('ses_denied', 'request-01', payload())
+    assert 'AgentGuard 已拦截' in result['choices'][0]['message']['content']
+    assert result['choices'][0]['finish_reason'] == 'stop'
+    assert await controller.turn('ses_denied', 'request-01', payload()) == result
+    assert upstream.inputs == [] and h.reads == [] and h.effects == []
+    status = controller.status()
+    assert status['phase'] == 'DENIED' and status['policy_rejected'] == 1
+
+
+@pytest.mark.asyncio
 async def test_unknown_effect_is_not_retried_or_exposed(tmp_path):
     h, _, controller = setup(tmp_path, [call('write_report', {'resource': 'reports', 'body': 'PRIVATE'})])
     def uncertain(resource, body):
@@ -242,3 +258,12 @@ def test_install_native_project_profile_has_no_provider_secret_and_backs_up(tmp_
     private=json.loads((tmp_path/'state/native-project/application.json').read_text())
     assert str(root/'opencode.json') in private['opencode']['protected_paths']
     assert json.loads(capsys.readouterr().out)['per_window_boundary'] is True
+
+    # The user starts `opencode` from $HOME too. Install into its standard user
+    # configuration while retaining the trusted project's resource boundary.
+    monkeypatch.setattr('agentguard.v2.opencode.Path.home', lambda: tmp_path/'home')
+    install(SimpleNamespace(config=str(config), env_file=None, project=None, global_install=True))
+    global_profile=json.loads((tmp_path/'home/.config/opencode/opencode.json').read_text())
+    assert global_profile['plugin']==profile['plugin']
+    assert json.loads((tmp_path/'state/native-project/application.json').read_text())['workspace']==str(root)
+    assert json.loads(capsys.readouterr().out)['configuration']==str(tmp_path/'home/.config/opencode')

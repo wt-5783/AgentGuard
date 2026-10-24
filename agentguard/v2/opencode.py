@@ -268,9 +268,11 @@ def install(args):
     if not binary or subprocess.check_output([binary,'--version'],text=True).strip() != '1.19.4':
         raise RuntimeFault('OPENCODE_VERSION_REQUIRES_1_19_4')
     settings = load_native_settings(args.config, args.env_file)
-    project = Path(args.project).resolve()
-    if project != Path(settings['workspace']).resolve():
+    project = Path(settings['workspace']).resolve()
+    target_directory = Path.home() / '.config/opencode' if getattr(args, 'global_install', False) else Path(args.project).resolve()
+    if not getattr(args, 'global_install', False) and target_directory != project:
         raise RuntimeFault('PROJECT_WORKSPACE_MISMATCH')
+    target_directory.mkdir(parents=True, exist_ok=True)
     private = Path(settings['state_directory']) / 'native-project'
     private.mkdir(parents=True, exist_ok=True, mode=0o700)
     config = private / 'application.json'
@@ -296,13 +298,13 @@ def install(args):
         'mcp': {}, 'share': 'disabled', 'snapshot': False, 'autoupdate': False,
         'compaction': {'auto': False, 'prune': False}}
     for name in ('opencode.json', 'tui.json'):
-        target = project/name
+        target = target_directory/name
         if target.exists():
             private_write(private/(name+'.backup-'+str(time.time_ns())),target.read_text())
-    private_write(project/'opencode.json', json.dumps(value,ensure_ascii=False,indent=2))
-    private_write(project/'tui.json', json.dumps({'$schema':'https://opencode.ai/tui.json', 'theme':'opencode',
+    private_write(target_directory/'opencode.json', json.dumps(value,ensure_ascii=False,indent=2))
+    private_write(target_directory/'tui.json', json.dumps({'$schema':'https://opencode.ai/tui.json', 'theme':'opencode',
         'plugin':[[(assets/'tui.tsx').as_uri(),{'discoveryDirectory':options['discoveryDirectory']}]]},ensure_ascii=False,indent=2))
-    print(canonical({'status':'INSTALLED','project':str(project),'default':'on','per_window_boundary':True}))
+    print(canonical({'status':'INSTALLED','project':str(project),'configuration':str(target_directory),'default':'on','per_window_boundary':True}))
 
 
 def attach(run, task=None):
@@ -335,7 +337,9 @@ def main():
     p = sub.add_parser('install')
     p.add_argument('--config', required=True)
     p.add_argument('--env-file')
-    p.add_argument('--project', required=True)
+    target = p.add_mutually_exclusive_group(required=True)
+    target.add_argument('--project')
+    target.add_argument('--global', dest='global_install', action='store_true', help='Show the switch in every OpenCode window, bound to the configured project workspace')
     args = parser.parse_args()
     try:
         if args.action == 'serve':
