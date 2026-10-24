@@ -64,3 +64,4 @@ def render(st):
             st.caption('原因代码：'+str(job.get('reason_code'))+'。不会自动重跑；如需再次执行，明确提交一个新任务。')
         if job.get('session_id') and st.button('查看此任务的审计记录'):
             st.session_state['audit_session']=job['session_id']; st.rerun()
+        return job

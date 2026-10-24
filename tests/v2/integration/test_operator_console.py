@@ -22,3 +22,19 @@ def test_failed_submission_keeps_id_and_failed_job_has_no_unreleased_answer(monk
     assert any('提交未确认' in e.value for e in app.error)
     app.button[1].click().run()
     assert len(calls)==1  # refreshing is read-only, never replay
+
+
+def test_pre_session_failure_does_not_show_a_previous_tasks_success(monkeypatch):
+    from pathlib import Path
+    from agentguard.v2 import console,operator_console
+    monkeypatch.setenv('AGENTGUARD_OPERATOR_TOKEN','test-operator')
+    monkeypatch.setenv('AGENTGUARD_OPERATOR_URL','http://127.0.0.1:8766')
+    monkeypatch.delenv('AGENTGUARD_V2_REPLAY',raising=False)
+    monkeypatch.setattr(operator_console,'operator_request',lambda *a,**k:[{
+        'job_id':'b'*32,'task':'denied','status':'FAILED','reason_code':'UNRESOLVED_REQUIREMENTS',
+        'session_id':None,'content':None}])
+    def forbidden(*args): raise AssertionError('Must not fetch another session by default')
+    monkeypatch.setattr(console.ConsoleReader,'get',forbidden)
+    app=AppTest.from_file(str(Path(console.__file__))).run()
+    assert not app.exception and not app.tabs
+    assert app.checkbox[0].label=='显示其他历史会话的审计与评测'

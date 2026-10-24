@@ -161,7 +161,14 @@ def run():
     replay_path = os.environ.get('AGENTGUARD_V2_REPLAY')
     if not replay_path:
         from agentguard.v2.operator_console import render
-        render(st)
+        job=render(st)
+        if job and not job.get('session_id'):
+            st.caption('该网页任务尚未建立审计会话，以上方任务状态为准。')
+            if not st.checkbox('显示其他历史会话的审计与评测',value=False):
+                return
+        elif job and st.session_state.get('operator_audit_link')!=job['job_id']:
+            st.session_state['audit_session']=job['session_id']
+            st.session_state['operator_audit_link']=job['job_id']
     if replay_path:
         record = json.loads(Path(replay_path).read_text(encoding='utf-8'))
         if record.get('format') != 'agentguard-console-0.1' or record.get('mode') != 'recorded':
