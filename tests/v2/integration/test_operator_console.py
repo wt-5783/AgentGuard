@@ -38,3 +38,19 @@ def test_pre_session_failure_does_not_show_a_previous_tasks_success(monkeypatch)
     app=AppTest.from_file(str(Path(console.__file__))).run()
     assert not app.exception and not app.tabs
     assert app.checkbox[0].label=='显示其他历史会话的审计与评测'
+
+
+def test_identical_tasks_have_distinct_selector_labels_and_keep_audit_target(monkeypatch):
+    from agentguard.v2 import operator_console
+    monkeypatch.setenv('AGENTGUARD_OPERATOR_TOKEN','test-operator')
+    monkeypatch.setenv('AGENTGUARD_OPERATOR_URL','http://127.0.0.1:8766')
+    jobs=[{'job_id':key*32,'task':'same task','status':'RELEASED','session_id':'session_'+key,
+           'content':'answer '+key} for key in ('a','b')]
+    monkeypatch.setattr(operator_console,'operator_request',lambda *a,**k:jobs)
+    app=AppTest.from_string('import streamlit as st\nfrom agentguard.v2.operator_console import render\nrender(st)').run()
+    assert len(set(app.selectbox[0].options))==2
+    app.selectbox[0].select('b'*32).run()
+    assert app.session_state['selected_job']=='b'*32
+    app.button[2].click().run()
+    assert app.session_state['selected_job']=='b'*32
+    assert app.session_state['audit_session']=='session_b'

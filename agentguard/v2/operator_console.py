@@ -55,7 +55,7 @@ def render(st):
         if st.session_state.get('selected_job') not in by_id:
             st.session_state['selected_job']=jobs[0]['job_id']
         chosen=st.selectbox('网页任务',list(by_id),key='selected_job',format_func=lambda key:
-            LABELS.get(by_id[key]['status'],by_id[key]['status'])+' · '+by_id[key]['task'][:45])
+            LABELS.get(by_id[key]['status'],by_id[key]['status'])+' · '+by_id[key]['task'][:45]+' · '+key[:8])
         job=by_id[chosen]
         st.write('状态：'+LABELS.get(job['status'],job['status']))
         if job['status']=='RELEASED': st.write(job['content'])
