@@ -248,7 +248,11 @@ def run_opencode(args):
 def main():
     parser = argparse.ArgumentParser(description='Task-bound AgentGuard MCP / OpenCode connector')
     sub = parser.add_subparsers(dest='action', required=True)
-    for name in ('serve', 'doctor', 'export', 'run-opencode'):
+    sub.add_parser('profiles', help='List adapter capabilities and verified scope; no network calls')
+    starter = sub.add_parser('init', help='Create private starter settings, task and credential template; no source tree needed')
+    starter.add_argument('--directory', required=True, help='New private directory outside workspace')
+    starter.add_argument('--workspace', required=True, help='Existing tool workspace')
+    for name in ('serve', 'doctor', 'export', 'run-opencode', 'check', 'bundle'):
         p = sub.add_parser(name)
         p.add_argument('--config', required=True, help='Trusted application JSON, outside tool roots')
         p.add_argument('--env-file', help='Private literal KEY=value file; no shell execution')
@@ -257,6 +261,11 @@ def main():
             p.add_argument('--task', required=True, help='New host-authorized task; starts a fresh OpenCode chat')
             p.add_argument('--json', action='store_true', help='Print the released final result as JSON')
             p.add_argument('--timeout', type=float, default=600, help='Task timeout in seconds (default: 600)')
+        elif name in ('check', 'bundle'):
+            p.add_argument('--task-file', help='Required for task-bound MCP profiles')
+            p.add_argument('--client', choices=('opencode-native', 'opencode', 'mcp', 'vscode'), default='opencode-native')
+            if name == 'bundle':
+                p.add_argument('--output', required=True, help='New private directory outside tool roots; never overwritten')
         else:
             p.add_argument('--task-file', required=True, help='Trusted task text file, outside tool roots')
         if name == 'export':
@@ -264,13 +273,31 @@ def main():
             p.add_argument('--output', required=True, help='JSON file; merges unrelated entries, refuses collisions/JSONC')
     args = parser.parse_args()
     try:
-        if args.action == 'serve':
+        if args.action == 'profiles':
+            from .integration import PROFILES
+            print(canonical({'profiles': PROFILES, 'cloud_calls': 0}))
+        elif args.action == 'init':
+            from .integration import initialize
+            print(canonical(initialize(args)))
+        elif args.action == 'check':
+            from .integration import preflight
+            report = preflight(args)
+            print(canonical(report))
+            if report['status'] != 'CONFIGURATION_READY':
+                raise SystemExit(1)
+        elif args.action == 'bundle':
+            from .integration import export_bundle
+            print(canonical(export_bundle(args)))
+        elif args.action == 'serve':
             asyncio.run(serve(args))
         elif args.action == 'doctor':
             print(canonical(asyncio.run(doctor(args))))
         elif args.action == 'export':
-            settings_for(args)
+            settings = settings_for(args)
             output = Path(args.output)
+            outside_tools(settings, output)
+            if not Path(args.task_file).read_text(encoding='utf-8').strip():
+                raise ValueError('Trusted task must not be empty')
             existing = strict_loads(output.read_text(encoding='utf-8')) if output.exists() else {}
             result = merge_config(existing, client_config(args.client, command_for(args)))
             private_write(output, json.dumps(result, ensure_ascii=False, indent=2) + '\n')

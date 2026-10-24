@@ -151,7 +151,8 @@ def main():
         manager=JobManager(directory,settings,os.environ.get('AGENTGUARD_V2_GATEWAY','http://127.0.0.1:8765'),
                            os.environ['AGENTGUARD_HOST_TOKEN'])
         try:
-            uvicorn.run(create_app(manager,token),host='127.0.0.1',port=8766,access_log=False)
+            uvicorn.run(create_app(manager,token),host='127.0.0.1',
+                port=int(os.environ.get('AGENTGUARD_OPERATOR_PORT','8766')),access_log=False)
         finally:
             manager.close()
 

@@ -1,4 +1,4 @@
-"""Supervise localhost gateway + read-only console; no paid call until a task."""
+"""Supervise the localhost workbench, gateway and operator; no call until a task."""
 import argparse
 import os
 from pathlib import Path
@@ -16,7 +16,10 @@ def main():
     parser.add_argument('--task')
     parser.add_argument('--port',type=int,default=8765)
     parser.add_argument('--ui-port',type=int,default=8502)
+    parser.add_argument('--operator-port',type=int,default=8766)
     args=parser.parse_args()
+    if len({args.port,args.ui_port,args.operator_port}) != 3 or not all(0 < p < 65536 for p in (args.port,args.ui_port,args.operator_port)):
+        parser.error('Use three distinct valid ports')
     settings=load_settings(args.config)
     env=dict(os.environ)
     if env.get('AGENTGUARD_V2_CLOUD_ENABLED')!='1':
@@ -27,7 +30,13 @@ def main():
     env['AGENTGUARD_V2_CONFIG']=str(Path(args.config).resolve())
     env['AGENTGUARD_HOST_TOKEN']=env.get('AGENTGUARD_HOST_TOKEN') or secrets.token_urlsafe(32)
     env['AGENTGUARD_UI_TOKEN']=env.get('AGENTGUARD_UI_TOKEN') or secrets.token_urlsafe(32)
+    env['AGENTGUARD_OPERATOR_TOKEN']=env.get('AGENTGUARD_OPERATOR_TOKEN') or secrets.token_urlsafe(32)
+    if len({env[key] for key in ('AGENTGUARD_HOST_TOKEN','AGENTGUARD_UI_TOKEN','AGENTGUARD_OPERATOR_TOKEN')}) != 3:
+        parser.error('Use distinct host, UI and operator credentials')
     env['AGENTGUARD_V2_GATEWAY']='http://127.0.0.1:'+str(args.port)
+    env['AGENTGUARD_OPERATOR_PORT']=str(args.operator_port)
+    env['AGENTGUARD_OPERATOR_URL']='http://127.0.0.1:'+str(args.operator_port)
+    env.setdefault('AGENTGUARD_EVAL_TOKEN_FILE',str(Path.home()/'.config/agentguard/eval-ui-token'))
     env['AGENTGUARD_V2_UI_PORT']=str(args.ui_port)
     env.pop('AGENTGUARD_V2_REPLAY',None)
     logs=Path(settings['state_directory'])/'service-logs'; logs.mkdir(parents=True,exist_ok=True)
@@ -36,11 +45,15 @@ def main():
     try:
         from . import console
         commands=[('gateway',[sys.executable,'-m','agentguard.v2.gateway.cli','--factory','agentguard.v2.application:factory',
-            '--port',str(args.port)]),('console',[sys.executable,'-m','streamlit','run',str(Path(console.__file__).resolve()),
-                '--server.address','127.0.0.1','--server.port',str(args.ui_port),'--browser.gatherUsageStats','false'])]
+            '--port',str(args.port)]),('operator',[sys.executable,'-m','agentguard.v2.jobs']),
+            ('console',[sys.executable,'-m','streamlit','run',str(Path(console.__file__).resolve()),
+                '--server.address','127.0.0.1','--server.port',str(args.ui_port),'--server.headless','true',
+                '--browser.gatherUsageStats','false'])]
         for name,command in commands:
             handle=(logs/(name+'.log')).open('a',encoding='utf-8'); handles.append(handle)
-            processes.append(subprocess.Popen(command,env=env,stdout=handle,stderr=subprocess.STDOUT,creationflags=flags))
+            from .services import console_environment
+            child_env=console_environment(env,settings) if name=='console' else env
+            processes.append(subprocess.Popen(command,env=child_env,stdout=handle,stderr=subprocess.STDOUT,creationflags=flags))
         from .console import ConsoleReader
         reader=ConsoleReader(env['AGENTGUARD_V2_GATEWAY'],env['AGENTGUARD_UI_TOKEN'])
         ready=False
@@ -48,19 +61,30 @@ def main():
             if any(p.poll() is not None for p in processes):
                 raise RuntimeError('A service exited; inspect '+str(logs))
             try:
-                reader.get('/v2/sessions'); ready=True; break
+                from .services import LocalServiceClient
+                reader.get('/v2/sessions')
+                LocalServiceClient(env['AGENTGUARD_OPERATOR_URL'],env['AGENTGUARD_OPERATOR_TOKEN']).request('/jobs')
+                from urllib.request import build_opener, ProxyHandler
+                from .review.clients import _NoRedirect
+                with build_opener(ProxyHandler({}),_NoRedirect()).open(
+                        'http://127.0.0.1:'+str(args.ui_port)+'/_stcore/health',timeout=2) as response:
+                    if response.read(16)!=b'ok':
+                        raise RuntimeError('Console not ready')
+                ready=True; break
             except Exception:
                 time.sleep(.25)
         if not ready:
             raise RuntimeError('Gateway startup timed out; inspect '+str(logs))
         print('Gateway: '+env['AGENTGUARD_V2_GATEWAY'])
         print('Console: http://127.0.0.1:'+str(args.ui_port))
+        print('Operator: '+env['AGENTGUARD_OPERATOR_URL'])
         print('Ctrl+C stops the services started by this command.')
         if args.task:
             subprocess.run([sys.executable,'-m','agentguard.v2.application','--config',args.config,'--task',args.task,
                             '--gateway',env['AGENTGUARD_V2_GATEWAY']],env=env,check=True)
         while all(p.poll() is None for p in processes):
             time.sleep(.5)
+        raise RuntimeError('A service exited; inspect '+str(logs))
     except KeyboardInterrupt:
         pass
     finally:

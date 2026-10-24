@@ -1,8 +1,10 @@
 # AgentGuard · 面向安全 Agent 的边界逃逸检测与风险隔离机制
 
+**2.0.0a6 统一工作台**：任务、审计、独立测评、Agent 接入与架构导航集中在 8502。接入包增加 `init / profiles / check / bundle`，见 [架构与入口](docs/v2/ARCHITECTURE.md)、[接入流程](docs/v2/INTEGRATION_SETUP.md)。工作区运行 `bash ai/bin/run_demo.sh`；安装包可用 `agentguard-v2-workbench --config /private/application.json` 启动（需 gateway/v2-console 扩展）。
+
 **OpenCode 原生防护开关**：安装 wheel 的 `[opencode]` 扩展后使用 `agentguard-v2-opencode install --global`（另需配置参数）；普通 OpenCode 底部提供 ON/OFF，F6 或点击切换，/guard 查看。受管模型/工具/FINAL 边界和恢复均已接入，支持同题双窗口对照，见 [原生接入指南](docs/v2/OPENCODE_NATIVE.md)。[通用 MCP 接入](docs/v2/AGENT_INTEGRATION.md) 继续保留。
 
-> **v2 功能开发版（2.0.0a5 / Python 3.12）**：已补长任务证据选择、原生/HTTP/LangChain 宿主、实际恢复、六视图控制台、独立评测与五类场景入口，并增加可打包的 OpenCode 原生开关及 MCP 接入。本机云端部署和实际工具任务已验证；仍是研究原型，不将接入成功等同于防护效果验收。当前入口见 [操作说明](docs/v2/OPERATIONS.md)，逐项实现见 [功能补齐记录](docs/v2/FEATURE_COMPLETION.md)。此前合并记录见 [集成验收报告](docs/v2/INTEGRATION_REVIEW_2026-10-22.md)。
+> **v2 功能开发版（2.0.0a6 / Python 3.12）**：已补长任务证据选择、原生/HTTP/LangChain 宿主、实际恢复、六视图控制台、独立评测与五类场景入口，并增加可打包的 OpenCode 原生开关及 MCP 接入。本机云端部署和实际工具任务已验证；仍是研究原型，不将接入成功等同于防护效果验收。当前入口见 [操作说明](docs/v2/OPERATIONS.md)，逐项实现见 [功能补齐记录](docs/v2/FEATURE_COMPLETION.md)。此前合并记录见 [集成验收报告](docs/v2/INTEGRATION_REVIEW_2026-10-22.md)。
 >
 > 保留 1.1.1 的第一阶段基础修复，详见 [docs/STAGE1.md](docs/STAGE1.md)。下文和仓库中的历史 DEMO 数据不代表 v2 实验成绩。
 

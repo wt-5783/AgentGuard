@@ -1,7 +1,5 @@
 """Operator controls backed by a separate authenticated localhost service."""
-import json
 import os
-from urllib.request import Request, build_opener, ProxyHandler
 from uuid import uuid4
 
 LABELS={'QUEUED':'排队中','RUNNING':'执行中','RELEASED':'回答已放行','BLOCKED':'已阻断',
@@ -18,18 +16,15 @@ REASONS={'HOST_REPEATED_CALL_LIMIT':'模型持续重复已完成的操作，已�
 
 
 def operator_request(path='/jobs',data=None):
-    base=os.environ['AGENTGUARD_OPERATOR_URL']
-    # This opt-in operator UI is only for the same machine.
-    if base!='http://127.0.0.1:8766': raise ValueError('Local operator URL required')
-    req=Request(base+path,data=json.dumps(data).encode() if data is not None else None,
-                headers={'Authorization':'Bearer '+os.environ['AGENTGUARD_OPERATOR_TOKEN'],
-                         'Content-Type':'application/json'})
-    with build_opener(ProxyHandler({})).open(req,timeout=5) as response:
-        return json.loads(response.read(2*1024*1024))
+    from .services import LocalServiceClient
+    return LocalServiceClient(os.environ['AGENTGUARD_OPERATOR_URL'],
+        os.environ['AGENTGUARD_OPERATOR_TOKEN']).request(path, data)
 
 
 def render(st):
-    if not os.environ.get('AGENTGUARD_OPERATOR_TOKEN') or not os.environ.get('AGENTGUARD_OPERATOR_URL'): return
+    if not os.environ.get('AGENTGUARD_OPERATOR_TOKEN') or not os.environ.get('AGENTGUARD_OPERATOR_URL'):
+        st.info('任务服务未配置。连接操作员服务后可在这里提交任务，审计和测评可独立使用。')
+        return
     with st.expander('提交任务 / 查看运行状态',expanded=True):
         st.caption('本机操作员入口 · 使用云端模型，提交后产生 API 用量。工具范围固定为演示工作目录。')
         st.session_state.setdefault('submission_id',uuid4().hex)
@@ -63,5 +58,7 @@ def render(st):
             st.warning(REASONS.get(job.get('reason_code'),'任务未完成。请查看审计记录中的失败阶段；已执行的操作不会自动撤回。'))
             st.caption('原因代码：'+str(job.get('reason_code'))+'。不会自动重跑；如需再次执行，明确提交一个新任务。')
         if job.get('session_id') and st.button('查看此任务的审计记录'):
-            st.session_state['audit_session']=job['session_id']; st.rerun()
+            st.session_state['audit_session']=job['session_id']
+            st.session_state['pending_workspace_page']='审计记录'
+            st.rerun()
         return job

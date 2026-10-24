@@ -1,4 +1,4 @@
-"""Six read-only views over the gateway or a labeled, sanitized recording."""
+"""Unified workbench with read-only gateway audit and sanitized replay."""
 import json
 import os
 from datetime import datetime
@@ -125,7 +125,7 @@ def render_overview(st, paths, prefix, session, metrics):
         st.dataframe(rows, hide_index=True, width='stretch')
     with st.expander('这份记录能证明什么', expanded=False):
         st.write('它记录本次执行、审查和放行的实际过程。真实防护效果还需要正常/攻击样本、开启/关闭防护对照和独立评分。')
-        st.write('本控制台仅查看记录；创建和执行任务仍通过宿主命令或 SDK。')
+        st.write('本页只查看审计记录；提交任务请打开任务工作台。')
         st.caption('会话标识：' + session['session_id'] + '；底层会话状态：' + session['status'] +
                    '。ACTIVE 表示会话可用，不等于任务正在执行。')
 
@@ -156,19 +156,44 @@ def capture(reader, sid):
 
 def run():
     import streamlit as st
-    st.set_page_config(page_title='AgentGuard v2', layout='wide')
-    st.title('AgentGuard v2 安全控制台')
+    st.set_page_config(page_title='AgentGuard 工作台', layout='wide')
     replay_path = os.environ.get('AGENTGUARD_V2_REPLAY')
-    if not replay_path:
+    if replay_path:
+        st.title('AgentGuard · 审计回放')
+        render_audit(st, replay_path)
+        return
+    from agentguard.v2.workbench import PAGES, render_page
+    pending = st.session_state.pop('pending_workspace_page', None)
+    if pending in PAGES:
+        st.session_state['workspace_page'] = pending
+    if 'workspace_page' not in st.session_state:
+        requested = st.query_params.get('page', 'tasks')
+        st.session_state['workspace_page'] = next((name for name, slug in PAGES.items() if slug == requested), '任务工作台')
+    page = st.sidebar.radio('工作区', list(PAGES), key='workspace_page')
+    st.query_params['page'] = PAGES[page]
+    st.sidebar.caption('AgentGuard v2 · 任务 / 防护 / 证据')
+    st.title('AgentGuard · ' + page)
+    if page == '审计记录':
+        render_audit(st)
+    elif page == '任务工作台':
         from agentguard.v2.operator_console import render
-        job=render(st)
-        if job and not job.get('session_id'):
+        job = render(st)
+        if not job:
+            st.caption('审计、测评和接入指南均可从左侧独立打开。')
+            return
+        if not job.get('session_id'):
             st.caption('该网页任务尚未建立审计会话，以上方任务状态为准。')
-            if not st.checkbox('显示其他历史会话的审计与评测',value=False):
+            if not st.checkbox('显示其他历史会话的审计与评测', value=False):
                 return
-        elif job and st.session_state.get('operator_audit_link')!=job['job_id']:
-            st.session_state['audit_session']=job['session_id']
-            st.session_state['operator_audit_link']=job['job_id']
+        elif st.session_state.get('operator_audit_link') != job['job_id']:
+            st.session_state['audit_session'] = job['session_id']
+            st.session_state['operator_audit_link'] = job['job_id']
+        render_audit(st)
+    else:
+        render_page(st, page)
+
+
+def render_audit(st, replay_path=None):
     if replay_path:
         record = json.loads(Path(replay_path).read_text(encoding='utf-8'))
         if record.get('format') != 'agentguard-console-0.1' or record.get('mode') != 'recorded':
@@ -183,8 +208,8 @@ def run():
         token = st.sidebar.text_input('UI 凭据', os.environ.get('AGENTGUARD_UI_TOKEN', ''), type='password')
         if not token:
             st.caption('设置 UI 凭据后读取会话。'); return
-        reader = ConsoleReader(base, token)
         try:
+            reader = ConsoleReader(base, token)
             sessions = reader.get('/v2/sessions')
             if not sessions:
                 st.caption('尚无会话。通过原生宿主或 SDK 创建任务后显示。'); return
@@ -204,7 +229,7 @@ def run():
             st.error('无法读取网关：' + type(exc).__name__); return
     prefix = '/v2/sessions/' + sid
     session, metrics = get(prefix), get(prefix + '/metrics')
-    tabs = st.tabs(['结果总览', '任务策略', '执行时间线', '实际 Guard 输入', '内容版本对比', '来源与恢复', '模型用量', '真实对照评测'])
+    tabs = st.tabs(['结果总览', '任务策略', '执行时间线', '实际 Guard 输入', '内容版本对比', '来源与恢复', '模型用量'])
     with tabs[0]:
         render_overview(st, paths, prefix, session, metrics)
     with tabs[1]:
@@ -265,16 +290,6 @@ def run():
         price_out = st.number_input('输出价格/百万 token', min_value=0.0)
         st.write('按已知用量估算费用：', (known_in * price_in + known_out * price_out) / 1_000_000)
         st.caption('费用是按填写单价估算。攻击成功率必须来自独立接收器和任务评分；未开展实验时没有效果数字。')
-    with tabs[7]:
-        report = os.environ.get('AGENTGUARD_V2_REPORT')
-        if report:
-            try:
-                from agentguard.v2.evaluation_console import render as render_evaluation
-                render_evaluation(st,json.loads(Path(report).read_text(encoding='utf-8')))
-            except (OSError,ValueError,KeyError):
-                st.info('对照评测尚在运行，暂未生成可读报告。')
-        else:
-            st.info('尚未配置独立评测报告。单次审计记录不能计算防护率。')
 
 
 def main():
@@ -282,6 +297,7 @@ def main():
     import sys
     raise SystemExit(subprocess.call([sys.executable, '-m', 'streamlit', 'run', str(Path(__file__).resolve()),
         '--server.address', '127.0.0.1', '--server.port', os.environ.get('AGENTGUARD_V2_UI_PORT', '8502'),
+        '--server.headless', 'true',
         '--browser.gatherUsageStats', 'false']))
 
 

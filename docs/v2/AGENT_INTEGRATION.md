@@ -1,6 +1,6 @@
 # OpenCode 与通用 Agent 接入
 
-2026-10-25：新增 [OpenCode 原生开关与全链路边界](OPENCODE_NATIVE.md)，本项目普通 opencode 已默认使用该原生 profile。下文是继续保留的通用 MCP 与单任务连接器，其保护范围不同。
+2026-10-25 / 2.0.0a6：[新版初始化、预检查与配置包流程](INTEGRATION_SETUP.md)；[项目架构与统一入口](ARCHITECTURE.md)。新增 [OpenCode 原生开关与全链路边界](OPENCODE_NATIVE.md)，本项目普通 opencode 已默认使用该原生 profile。下文是继续保留的通用 MCP 与单任务连接器，其保护范围不同。
 
 正式包提供 `agentguard-v2-connect`，不依赖 `ai/bin`、benchmarks 或源码目录。Python >= 3.12；运行时使用已有 Runtime、PolicyCompiler、GuardService 和工具注册表。MCP stdio 是跨 Agent 接入层，OpenCode 1.19.4 是本机验证目标。
 
@@ -10,7 +10,7 @@
 
 ```bash
 python3.12 -m venv ~/.local/share/agentguard/connector-venv
-~/.local/share/agentguard/connector-venv/bin/python -m pip install '/absolute/path/agentguard-2.0.0a2-py3-none-any.whl[connect]'
+~/.local/share/agentguard/connector-venv/bin/python -m pip install '/absolute/path/agentguard-2.0.0a6-py3-none-any.whl[connect,opencode]'
 ```
 
 源码构建：`python -m build --wheel`。也可在开发虚拟环境执行 `python -m pip install '.[connect]'`。Windows 用虚拟环境的 `Scripts/python.exe` 和 `Scripts/agentguard-v2-connect.exe`；本轮未验证原生 Windows。
@@ -47,13 +47,13 @@ agentguard-v2-connect export --client opencode \
   --config ~/.config/agentguard/project-agent.json \
   --task-file ~/.config/agentguard/opencode-task.txt \
   --env-file ~/.config/agentguard/live.env --enable-cloud \
-  --output /absolute/project/opencode.json
+  --output /private/opencode-mcp.json
 
 opencode mcp list --pure
 opencode --pure --agent agentguard
 ```
 
-导出合并名为 `agentguard` 的 MCP 和 agent 配置，保留已有 provider、其他 agent 和服务器；已有默认 agent 保留，未指定默认时设为 agentguard。同名不同值会拒绝覆盖；JSONC 文件请先导出到新 JSON 文件后人工合并。可明确选择 `--agent agentguard`；普通 Build agent 不自动受管。在普通交互界面里，MCP 只能审查提交到 `guard_finalize` 的文本，不能强制拦截 OpenCode 直接显示的最终回答。需要最终显示门禁时用上面的 `run-opencode`。
+导出文件须位于工具根之外，再由宿主合并到客户端配置并保护其不被工具修改。导出合并名为 `agentguard` 的 MCP 和 agent 配置，保留已有 provider、其他 agent 和服务器；已有默认 agent 保留，未指定默认时设为 agentguard。同名不同值会拒绝覆盖；JSONC 文件请先导出到新 JSON 文件后人工合并。可明确选择 `--agent agentguard`；普通 Build agent 不自动受管。在普通交互界面里，MCP 只能审查提交到 `guard_finalize` 的文本，不能强制拦截 OpenCode 直接显示的最终回答。需要最终显示门禁时用上面的 `run-opencode`。
 
 一个 MCP 连接绑定一个宿主任务；任务完成后后续工具调用会拒绝。更换任务请启动新进程，不能把编辑任务文件当成当前进程更新授权。OpenCode 如提供 `ai.opencode/sessionID` 元数据，会绑定首个 chat，拒绝另一个 chat 复用；不提供该元数据的客户端必须为每个任务建立独立连接。断线/进程重启也代表新任务，不能依赖它恢复或自动重放有副作用的操作。
 
