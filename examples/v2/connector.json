@@ -1,0 +1,28 @@
+{
+  "workspace": "workspace",
+  "state_directory": "../../logs/connector-state",
+  "guard": {
+    "provider": "deepseek",
+    "endpoint": "https://api.deepseek.com/chat/completions",
+    "model": "deepseek-flash",
+    "api_key_env": "AGENTGUARD_GUARD_API_KEY",
+    "destination_id": "guard",
+    "thinking": "disabled",
+    "compact_protocol": true,
+    "protocol_retries": 2
+  },
+  "agent": {
+    "provider": "deepseek",
+    "endpoint": "https://api.deepseek.com/chat/completions",
+    "model": "deepseek-flash",
+    "api_key_env": "AGENTGUARD_AGENT_API_KEY",
+    "destination_id": "agent",
+    "thinking": "disabled",
+    "compact_protocol": true
+  },
+  "network_destinations": [],
+  "max_calls": 100,
+  "max_review_bytes": 512000,
+  "max_attempts": 200,
+  "confirmed_authorizations": ["Read and write only inside the configured workspace for the host-provided task. No network sends."]
+}
