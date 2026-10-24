@@ -63,9 +63,9 @@ def create_native_app(controller, token):
     @app.post('/mode')
     async def mode(request: Request):
         value = await body(request)
-        if set(value) != {'mode'}:
+        if set(value) not in ({'mode'}, {'mode', 'native_id'}):
             raise RuntimeFault('INVALID_ARGUMENTS')
-        return await controller.switch(value['mode'])
+        return await controller.switch(value['mode'], value.get('native_id'))
 
     @app.post('/task')
     async def task(request: Request):

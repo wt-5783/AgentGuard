@@ -147,6 +147,40 @@ async def test_mode_snapshot_and_unknown_model_or_tool_fail_closed(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_switch_same_chat_applies_next_input_and_preserves_other_chat(tmp_path):
+    send = call('send_report', {'destination': 'receiver', 'body': 'synthetic'})
+    h, _, controller = setup(tmp_path, [send, {'content': 'Finished.'}, send, {'content': 'Finished.'}, send], send=False)
+    task = 'Send synthetic data to receiver.'
+    await controller.submit('ses_current', task)
+    await controller.turn('ses_current', 'request-01', payload())
+    await controller.turn('ses_current', 'request-02', payload())
+    protected = controller.get('ses_current')
+    assert protected.terminal == 'HOST_TASK_COMPLETED' and h.effects == []
+    await controller.submit('ses_other', 'Another chat.')
+    app = create_native_app(controller, 'native-host-token')
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url='http://native') as client:
+        response = await client.post('/mode', headers={'Authorization': 'Bearer native-host-token'},
+            json={'mode': 'off', 'native_id': 'ses_current'})
+        assert response.status_code == 200 and response.json()['mode'] == 'off'
+    assert controller.get('ses_current') is protected and protected.mode == 'on'
+    assert controller.status('ses_other')['mode'] == 'on'
+    await controller.submit('ses_current', task)  # Same prompt, same OpenCode chat.
+    assert controller.get('ses_current').mode == 'off'
+    await controller.turn('ses_current', 'request-03', payload())
+    await controller.turn('ses_current', 'request-04', payload())
+    assert len(h.effects) == 1
+    await controller.switch('on', 'ses_current')
+    await controller.submit('ses_current', task)
+    await controller.turn('ses_current', 'request-05', payload())
+    assert len(h.effects) == 1 and controller.status('ses_current')['blocked'] == 1
+    assert controller.get('ses_current').runtime_id != protected.runtime_id
+    assert set(controller.tasks) == {'ses_current', 'ses_other'}
+    async with controller.get('ses_current').lock:
+        with pytest.raises(RuntimeFault, match='TASK_BUSY'):
+            await controller.switch('off', 'ses_current')
+
+
+@pytest.mark.asyncio
 async def test_final_rejection_never_streams_any_prefix(tmp_path):
     h, _, controller = setup(tmp_path, [{'content': 'PRIVATE_FINAL_NEVER_STREAM'}], guard_mode='BLOCK', recover=False)
     h.guard.phase = 'FINAL'

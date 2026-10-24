@@ -1,12 +1,12 @@
 # OpenCode 原生防护开关
 
-2026-10-25；AgentGuard **2.0.0a4** / OpenCode **1.19.4** / Python 3.12+。本机 Linux ARM64 已验证。
+2026-10-25；AgentGuard **2.0.0a5** / OpenCode **1.19.4** / Python 3.12+。本机 Linux ARM64 已验证。
 
 ## 使用
 
 运行普通 `opencode`，底部只有一个明确的 AgentGuard ON/OFF 开关。按 **F6** 或点击开关切换；`/guard` 查看绑定项目、模型、执行、策略拒绝、ACTION/RESULT/FINAL、脱敏和恢复。
 
-切换会新建会话；任务执行中不允许切换；旧会话保持原模式。各 OpenCode 窗口独立。用户级安装后，从主目录启动也能显示开关，工具仍绑定安装时配置的项目，不自动扩大到当前目录。
+切换保留当前 OpenCode 会话和聊天记录，从下一条输入生效，不新建或跳转会话；任务执行中不允许切换。其他会话保持各自模式，各窗口独立。切换前任务的执行记录和审计保持原样。用户级安装后，从主目录启动也能显示开关，工具仍绑定安装时配置的项目，不自动扩大到当前目录。
 
 **旧版 Ctrl+Shift+G 与 Kitty 的上条命令输出快捷键冲突，已移除。** 若旧窗口正在显示 `~` / `(END)`，按 q 退出 less，退出并重新启动 OpenCode 加载新版插件。
 
@@ -16,7 +16,7 @@
 
 ```bash
 python3.12 -m venv ~/.local/share/agentguard/connector-venv
-~/.local/share/agentguard/connector-venv/bin/python -m pip install '/absolute/path/agentguard-2.0.0a4-py3-none-any.whl[opencode]'
+~/.local/share/agentguard/connector-venv/bin/python -m pip install '/absolute/path/agentguard-2.0.0a5-py3-none-any.whl[opencode]'
 
 # 用户级安装：从任意目录启动都显示开关，工具绑定配置中的 workspace
 ~/.local/share/agentguard/connector-venv/bin/agentguard-v2-opencode install \

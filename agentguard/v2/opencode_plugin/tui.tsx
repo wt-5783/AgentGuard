@@ -57,27 +57,21 @@ export default {
         return
       }
       changing = true
-      const old = state().default_mode
       const mode = state().mode === "on" ? "off" : "on"
       try {
-        await rpc("/mode", { mode })
-        const response = await api.client.session.create({ title: `AgentGuard ${mode.toUpperCase()}`, agent: "agentguard" })
-        if (response.error || !response.data?.id) throw new Error("NEW_SESSION_FAILED")
-        api.route.navigate("session", { sessionID: response.data.id })
+        setState(await rpc("/mode", { mode, native_id: id }))
         api.ui.dialog.clear()
-        await refresh()
         api.ui.toast({ variant: mode === "on" ? "success" : "warning", title: "AgentGuard",
-          message: mode === "on" ? "防护已开启 · 已创建干净的新任务" : "防护已关闭 · 已创建独立对照任务", duration: 4000 })
+          message: mode === "on" ? "防护已开启 · 从下一条输入生效" : "防护已关闭 · 从下一条输入生效", duration: 4000 })
       } catch {
-        await rpc("/mode", { mode: old }).catch(() => {})
-        api.ui.toast({ variant: "error", title: "AgentGuard", message: "切换未完成；现有任务的防护模式保持不变。" })
+        api.ui.toast({ variant: "error", title: "AgentGuard", message: "切换失败，请重试。" })
       } finally { changing = false }
     }
     function details() {
       api.ui.dialog.replace(() => (
         <api.ui.DialogSelect title="AgentGuard · 防护中心" flat placeholder="搜索防护状态或选择开关"
           options={[
-            { title: label(), value: "toggle", description: "切换防护并新建任务；已有任务的模式固定", footer: "F6" },
+            { title: label(), value: "toggle", description: "保留当前会话，从下一条输入生效", footer: "F6" },
             { title: `模型 · ${state().model ?? "连接中"}`, value: "model", description: "两侧使用同一模型与参数" },
             { title: `项目 · ${state().workspace ?? "连接中"}`, value: "workspace" },
             { title: `状态 · ${PHASE[state().phase] ?? state().phase}`, value: "phase" },

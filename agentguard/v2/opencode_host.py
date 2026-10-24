@@ -183,6 +183,7 @@ class NativeController:
         self.upstream_factory = upstream_factory or (lambda app: NativeUpstream(app.model.client,
             reasoning_effort=settings.get('opencode', {}).get('reasoning_effort')))
         self.tasks = {}
+        self.session_modes = {}
         self.active_id = None
         self.control_lock = asyncio.Lock()
         # Construct the trusted catalog without invoking a model.
@@ -199,16 +200,20 @@ class NativeController:
         return [{'name': 'ag_' + m.tool_id, 'description': f'AgentGuard {m.tool_id} ({",".join(m.effects)})'}
             for m in self.catalog_app.request.tool_manifests]
 
-    async def switch(self, mode):
+    async def switch(self, mode, native_id=None):
         async with self.control_lock:
             if mode not in ('on', 'off'):
                 raise RuntimeFault('INVALID_MODE')
             if any(t.lock.locked() for t in self.tasks.values()):
                 raise RuntimeFault('TASK_BUSY')
-            # Existing tasks are immutable mode snapshots. A TUI toggle creates
-            # a new native chat before another host task can be submitted.
+            if native_id is not None:
+                if not isinstance(native_id, str) or not native_id.startswith('ses_') or len(native_id) > 200:
+                    raise RuntimeFault('INVALID_NATIVE_SESSION')
+                self.session_modes[native_id] = mode
+            # Completed task state/audit stays intact. The next user input uses
+            # the selected mode inside this same native OpenCode chat.
             self.mode = mode
-            return self.status()
+            return self.status(native_id)
 
     async def submit(self, native_id, text):
         if not isinstance(text, str) or not text.strip() or len(text.encode()) > 64000:
@@ -217,7 +222,8 @@ class NativeController:
             raise RuntimeFault('INVALID_NATIVE_SESSION')
         async with self.control_lock:
             old = self.tasks.get(native_id)
-            if old and old.task == text:
+            mode = self.session_modes.get(native_id, self.mode)
+            if old and old.task == text and old.mode == mode:
                 return self.status(native_id)  # Lost chat.message response, no restart.
             if old and old.lock.locked():
                 raise RuntimeFault('TASK_BUSY')
@@ -231,14 +237,13 @@ class NativeController:
                 rules = [r.model_copy(update={'destination_ids': [d for d in r.destination_ids if d in allowed]})
                     for r in app.request.host_policy.rules if r.effect != 'SEND' or set(r.destination_ids) & allowed]
                 app.request = app.request.model_copy(update={'host_policy': app.request.host_policy.model_copy(update={'rules': rules})})
-            # A native chat keeps its mode even when another chat changes the
-            # default. Only creating a new chat can adopt a different mode.
-            state = NativeTask(native_id, text, old.mode if old else self.mode, app, directory, self.upstream_factory(app))
+            state = NativeTask(native_id, text, mode, app, directory, self.upstream_factory(app))
             # Preserve the authorization input even when policy compilation
             # refuses the task before a Runtime session can be allocated.
             private_write(directory / 'trusted-task.json', canonical({'native_session_id': native_id,
                 'mode': state.mode, 'trusted_task': text, 'session_request': app.request.model_dump(mode='json')}))
             self.tasks[native_id] = state
+            self.session_modes[native_id] = mode
             self.active_id = native_id
             self.save(state)
             return self.status(native_id)
@@ -257,7 +262,9 @@ class NativeController:
             'guard': guard.budget.records if guard is not None else None}))
 
     def status(self, native_id=None):
-        state = self.tasks.get(native_id or self.active_id)
+        mode = self.session_modes.get(native_id, self.mode)
+        native_id = native_id or self.active_id
+        state = self.tasks.get(native_id)
         reviews = {}
         executed = state.effects if state else 0
         if state and state.runtime_id:
@@ -266,7 +273,7 @@ class NativeController:
                 reviews[phase] = reviews.get(phase, 0) + 1
             executed = sum(bool((r.get('receipt') or {}).get('effect_evidence', {}).get('dispatched'))
                 for r in state.app.runtime.store.all(state.runtime_id, 'result'))
-        return {'healthy': True, 'default_mode': self.mode, 'mode': state.mode if state else self.mode,
+        return {'healthy': True, 'default_mode': self.mode, 'mode': mode,
             'native_session_id': state.native_id if state else None,
             'runtime_session_id': state.runtime_id if state else None,
             'busy': bool(state and state.lock.locked() and state.phase not in ('COMPLETE', 'ERROR', 'READY', 'RECOVERED', 'DENIED')), 'phase': state.phase if state else 'READY',
