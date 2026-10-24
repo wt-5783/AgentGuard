@@ -159,6 +159,9 @@ def run():
     st.set_page_config(page_title='AgentGuard v2', layout='wide')
     st.title('AgentGuard v2 安全控制台')
     replay_path = os.environ.get('AGENTGUARD_V2_REPLAY')
+    if not replay_path:
+        from agentguard.v2.operator_console import render
+        render(st)
     if replay_path:
         record = json.loads(Path(replay_path).read_text(encoding='utf-8'))
         if record.get('format') != 'agentguard-console-0.1' or record.get('mode') != 'recorded':
@@ -168,7 +171,7 @@ def run():
         paths = record['paths']
         get = lambda path: paths[path]
     else:
-        st.caption('查看任务结果与防护记录 · 只读界面，刷新不会执行任务')
+        st.caption('以下为侧栏所选会话的审计详情 · 刷新不会执行任务')
         base = st.sidebar.text_input('网关', os.environ.get('AGENTGUARD_V2_GATEWAY', 'http://127.0.0.1:8765'))
         token = st.sidebar.text_input('UI 凭据', os.environ.get('AGENTGUARD_UI_TOKEN', ''), type='password')
         if not token:
@@ -178,7 +181,10 @@ def run():
             sessions = reader.get('/v2/sessions')
             if not sessions:
                 st.caption('尚无会话。通过原生宿主或 SDK 创建任务后显示。'); return
-            sid = st.sidebar.selectbox('选择执行记录（最新在前）', [s['session_id'] for s in sessions],
+            session_ids = [s['session_id'] for s in sessions]
+            if st.session_state.get('audit_session') not in session_ids:
+                st.session_state['audit_session'] = session_ids[0]
+            sid = st.sidebar.selectbox('选择执行记录（最新在前）', session_ids, key='audit_session',
                 format_func=lambda value: '执行记录 · ' + value.removeprefix('session_')[:8])
             if st.sidebar.button('刷新记录'):
                 st.rerun()
@@ -191,7 +197,7 @@ def run():
             st.error('无法读取网关：' + type(exc).__name__); return
     prefix = '/v2/sessions/' + sid
     session, metrics = get(prefix), get(prefix + '/metrics')
-    tabs = st.tabs(['结果总览', '任务策略', '执行时间线', '实际 Guard 输入', '内容版本对比', '来源与恢复', '用量与评测'])
+    tabs = st.tabs(['结果总览', '任务策略', '执行时间线', '实际 Guard 输入', '内容版本对比', '来源与恢复', '模型用量', '真实对照评测'])
     with tabs[0]:
         render_overview(st, paths, prefix, session, metrics)
     with tabs[1]:
@@ -252,9 +258,16 @@ def run():
         price_out = st.number_input('输出价格/百万 token', min_value=0.0)
         st.write('按已知用量估算费用：', (known_in * price_in + known_out * price_out) / 1_000_000)
         st.caption('费用是按填写单价估算。攻击成功率必须来自独立接收器和任务评分；未开展实验时没有效果数字。')
+    with tabs[7]:
         report = os.environ.get('AGENTGUARD_V2_REPORT')
         if report:
-            st.json(json.loads(Path(report).read_text(encoding='utf-8')))
+            try:
+                from agentguard.v2.evaluation_console import render as render_evaluation
+                render_evaluation(st,json.loads(Path(report).read_text(encoding='utf-8')))
+            except (OSError,ValueError,KeyError):
+                st.info('对照评测尚在运行，暂未生成可读报告。')
+        else:
+            st.info('尚未配置独立评测报告。单次审计记录不能计算防护率。')
 
 
 def main():

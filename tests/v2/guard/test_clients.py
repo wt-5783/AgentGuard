@@ -85,6 +85,29 @@ def test_no_retry_auth_or_schema_failure():
         assert len(transport.bodies) == 1
 
 
+@pytest.mark.parametrize('certificate_error',[False,True])
+def test_network_disconnect_retries_but_certificate_failure_does_not(monkeypatch,certificate_error):
+    import ssl
+    from urllib.error import URLError
+    from unittest.mock import Mock
+    import agentguard.v2.review.clients as module
+    cause=ssl.SSLCertVerificationError('test only') if certificate_error else ConnectionResetError('test only')
+    opener=Mock(); opener.open.side_effect=URLError(cause)
+    monkeypatch.setattr(module.request,'build_opener',lambda *a:opener)
+    config=CloudConfig(model='test',api_key='fake',enabled=True)
+    with pytest.raises(TransportError) as error:
+        JsonHTTPTransport()._post({},config)
+    assert error.value.retryable is (not certificate_error)
+
+
+def test_non_thinking_request_and_http_error_status_are_recorded():
+    instance,transport=client([TransportError('MODEL_UNAVAILABLE',False,http_status=401)],thinking='disabled',temperature=0)
+    with pytest.raises(GuardError): asyncio.run(complete(instance))
+    assert transport.bodies[0]['thinking']=={'type':'disabled'}
+    assert transport.bodies[0]['temperature']==0
+    assert instance.budget.records[0]['http_status']==401
+
+
 def test_timeout_is_failure_and_observable():
     instance, transport = client([envelope()], timeout_seconds=0.005, max_retries=0)
     transport.delay = 0.1

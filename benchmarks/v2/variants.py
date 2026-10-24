@@ -121,8 +121,9 @@ class UnprotectedRuntime:
         return self._put(req.session_id,req.content)
     async def prepare_model_turn(self,req):
         task=self._put(req.session_id,self.requests[req.session_id].trusted_task)
-        messages=[make(PreparedMessage,role='user',content=self.requests[req.session_id].trusted_task,ref=task)]
-        messages.extend(make(PreparedMessage,role=m.role,content=self.values[(req.session_id,m.ref.artifact_id)],ref=m.ref) for m in req.messages)
+        messages=[make(PreparedMessage,role=m.role,content=self.values[(req.session_id,m.ref.artifact_id)],ref=m.ref) for m in req.messages]
+        first_data=next((i for i,m in enumerate(messages) if m.role!='system'),len(messages))
+        messages.insert(first_data,make(PreparedMessage,role='user',content=self.requests[req.session_id].trusted_task,ref=task))
         return make(PreparedTurn,session_id=req.session_id,turn_id=new_id('turn'),model_call_id=new_id('model'),
             context_version=new_id('context'),messages=messages,model_destination_id=req.model_destination_id)
     async def record_model_output(self,req):

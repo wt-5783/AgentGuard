@@ -172,7 +172,8 @@ class Runtime:
             messages = list(req.messages)
             task_ref = EvidenceRef.model_validate_json(canonical(state['task_ref']))
             if not any(m.ref == task_ref for m in messages):
-                messages.insert(0, make(Message, role='user', ref=task_ref))
+                first_data = next((i for i, m in enumerate(messages) if m.role != 'system'), len(messages))
+                messages.insert(first_data, make(Message, role='user', ref=task_ref))
             metas, prepared = [], []
             for msg in messages:
                 meta = self.artifacts.whole_ref(sid, msg.ref, conn)

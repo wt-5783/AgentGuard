@@ -89,14 +89,17 @@ class PolicyCompiler:
                                        "base_policy_version": data["current_policy_version"],
                                        "prompt_version": POLICY_PROMPT_VERSION, "model": self.client.model,
                                        "destination_id": self.client.destination_id, "messages": messages}))
-        reply = await self.client.complete(
-            messages=messages,
-            purpose="policy", prompt_version=POLICY_PROMPT_VERSION,
-        )
-        self.usage_records.append({"session_id": data["session_id"],
-                                   "base_policy_version": data["current_policy_version"],
-                                   "usage": wire_usage(reply.usage)})
-        candidate = strict_json(reply.content)
-        candidate = payload(self.contracts.parse('PolicyCandidate', candidate))
-        validate_candidate(candidate, data)
-        return self.contracts.parse("PolicyCandidate", candidate)
+        from agentguard.v2.review.protocol import complete_validated
+        def validate(text):
+            candidate = payload(self.contracts.parse('PolicyCandidate', strict_json(text)))
+            validate_candidate(candidate, data)
+            if data['current_policy_version'] is None:
+                required = {g['destination_id'] for g in data['host_policy']['model_destination_ids']}
+                if not required <= {g['destination_id'] for g in candidate['model_destination_ids']}:
+                    raise GuardError('INVALID_REFERENCE')
+            return self.contracts.parse('PolicyCandidate', candidate)
+        candidate, usage = await complete_validated(self.client, messages, purpose='policy',
+            prompt_version=POLICY_PROMPT_VERSION, validate=validate)
+        self.usage_records.append({'session_id': data['session_id'],
+            'base_policy_version': data['current_policy_version'], 'usage': wire_usage(usage)})
+        return candidate

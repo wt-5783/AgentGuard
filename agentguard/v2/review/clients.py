@@ -8,6 +8,7 @@ import asyncio
 from dataclasses import dataclass, field
 import os
 import socket
+import ssl
 import time
 from urllib.parse import urlsplit
 from urllib import error, request
@@ -32,8 +33,18 @@ class CloudConfig:
     retry_delay_seconds: float = 0.25
     endpoint: str = 'https://api.deepseek.com/chat/completions'
     provider: str = 'deepseek'
+    thinking: str | None = None
+    temperature: float | None = None
+    protocol_retries: int = 0
+    compact_protocol: bool = False
 
     def __post_init__(self):
+        if type(self.compact_protocol) is not bool:
+            raise GuardError("MODEL_CONFIGURATION_ERROR")
+        if self.thinking not in (None, "enabled", "disabled") or type(self.protocol_retries) is not int or not 0 <= self.protocol_retries <= 2:
+            raise GuardError("MODEL_CONFIGURATION_ERROR")
+        if self.temperature is not None and (type(self.temperature) not in (int, float) or not 0 <= self.temperature <= 2):
+            raise GuardError("MODEL_CONFIGURATION_ERROR")
         endpoint = urlsplit(self.endpoint)
         if (endpoint.scheme != 'https' or not endpoint.hostname or endpoint.username or
                 endpoint.password or endpoint.query or endpoint.fragment or
@@ -78,9 +89,10 @@ class CloudReply:
 
 
 class TransportError(Exception):
-    def __init__(self, code, retryable=False):
+    def __init__(self, code, retryable=False, http_status=None):
         self.code = code
         self.retryable = retryable
+        self.http_status = http_status
         super().__init__(code)
 
 
@@ -139,14 +151,19 @@ class JsonHTTPTransport:
             # Never read/log an HTTP error body: it can reflect source text/keys.
             code = exc.code
             exc.close()
-            raise TransportError("MODEL_UNAVAILABLE", code == 429 or 500 <= code < 600) from None
+            raise TransportError("MODEL_UNAVAILABLE", code == 429 or 500 <= code < 600, http_status=code) from None
         except (TimeoutError, socket.timeout):
             raise TransportError("MODEL_TIMEOUT", True) from None
         except error.URLError as exc:
             timeout = isinstance(exc.reason, (TimeoutError, socket.timeout))
-            raise TransportError("MODEL_TIMEOUT" if timeout else "MODEL_UNAVAILABLE", timeout) from None
-        except (OSError, UnicodeError):
+            raise TransportError("MODEL_TIMEOUT" if timeout else "MODEL_UNAVAILABLE",
+                not isinstance(exc.reason, ssl.SSLCertVerificationError)) from None
+        except ssl.SSLCertVerificationError:
             raise TransportError("MODEL_UNAVAILABLE") from None
+        except OSError:
+            raise TransportError("MODEL_UNAVAILABLE", True) from None
+        except UnicodeError:
+            raise TransportError("INVALID_SCHEMA") from None
 
 
 class CloudClient:
@@ -171,6 +188,10 @@ class CloudClient:
         body = {"model": self.model, "messages": payload({"messages": messages})["messages"], "stream": False,
                 "response_format": {"type": "json_object"},
                 "max_tokens": self.config.max_output_tokens}
+        if self.config.thinking is not None:
+            body["thinking"] = {"type": self.config.thinking}
+        if self.config.temperature is not None:
+            body["temperature"] = self.config.temperature
         input_bytes = len(dumps(body).encode("utf-8"))
         if input_bytes > self.config.max_input_bytes:
             raise GuardError("CONTENT_TOO_LARGE")
@@ -222,6 +243,8 @@ class CloudClient:
                     raise
                 except (TimeoutError, TransportError) as exc:
                     record["error"] = exc.code if isinstance(exc, TransportError) else "MODEL_TIMEOUT"
+                    if isinstance(exc, TransportError):
+                        record["http_status"] = exc.http_status
                     retry = not isinstance(exc, TransportError) or exc.retryable
                 except GuardError as exc:
                     record["error"] = exc.reason_code
@@ -253,5 +276,5 @@ class CloudClient:
                     })
                 if not retry or attempt > self.config.max_retries:
                     raise GuardError(record["error"], usage=measured(attempt)) from None
-            await asyncio.sleep(self.config.retry_delay_seconds)
+            await asyncio.sleep(min(5, self.config.retry_delay_seconds * (2 ** (attempt - 1))))
         raise AssertionError("unreachable")

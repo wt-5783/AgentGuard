@@ -2,7 +2,7 @@
 
 from .boundary import dumps
 
-PROMPT_VERSION = "guard-v2-context-0.2"
+PROMPT_VERSION = "guard-v2-context-0.3-protocol"
 BINDINGS = ("schema_version", "review_id", "session_id", "turn_id", "call_id", "phase",
             "policy_version", "context_version", "subject_ref")
 
@@ -25,7 +25,9 @@ def review_messages(req):
         "ACTION checks the complete proposed arguments against the task. RESULT checks all "
         "returned content (including errors/stderr). FINAL checks the complete proposed answer. "
         "Copy every binding exactly. decision is ALLOW, BLOCK, REDACT, or NEEDS_CONTEXT. "
-        "Every decision cites the current subject. BLOCK/REDACT findings need exact locations: "
+        "Every decision cites the current subject: copy subject_ref exactly into evidence_refs, "
+        "including its hash; never substitute an older object with the same text. "
+        "BLOCK/REDACT findings need exact locations: "
         "EvidenceRef with Python Unicode code-point span [start,end) or JSON pointer. "
         "Each finding has schema_version=0.1, finding_type, affected_action_field (a pointer "
         "into ACTION.args or null), evidence_refs. Every EvidenceRef includes schema_version, "

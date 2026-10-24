@@ -58,8 +58,11 @@ def test_failure_fixtures_never_allow(case):
         target[case["path"][-1]] = case["value"]
     runner, _ = service([reply])
     outcome = asyncio.run(runner.inspect(fixture("guard_failure")))
+    usage = None if "transport_error" in case else {
+        "schema_version": "0.1", "provider": "fake", "model": "scripted-offline",
+        "input_tokens": None, "output_tokens": None, "latency_ms": 0.0, "attempts": 1}
     assert outcome == {"schema_version": "0.1", "status": "FAILED", "decision": None,
-                       "failure": {"schema_version": "0.1", "reason_code": case["expected_reason"], "usage": None}}
+                       "failure": {"schema_version": "0.1", "reason_code": case["expected_reason"], "usage": usage}}
 
 
 @pytest.mark.parametrize("raw", ['{"x":NaN}', '{"x":Infinity}', '{"x":1e999}',

@@ -104,8 +104,11 @@ class Reviewer:
             raise GuardError("INVALID_SCHEMA")
         evidence_index(data)
         authorize_destination(data, self.client)
-        messages = review_messages(data)
-        trace = {'request': data, 'binding': bindings(data), 'prompt_version': PROMPT_VERSION,
+        compact = getattr(getattr(self.client, 'config', None), 'compact_protocol', False)
+        from .compact import messages as compact_messages, expand
+        messages = compact_messages(data) if compact else review_messages(data)
+        prompt_version = PROMPT_VERSION + ('-compact-v1' if compact else '')
+        trace = {'request': data, 'binding': bindings(data), 'prompt_version': prompt_version,
                  'model': self.client.model, 'destination_id': self.client.destination_id,
                  'messages': messages, 'cache_hit': False, 'submitted': False}
         self._traces[(data['review_id'], data['supplemental_attempt'])] = trace
@@ -114,7 +117,7 @@ class Reviewer:
         model_identity = '|'.join((getattr(self.client, 'provider', ''), self.client.model,
                                   getattr(getattr(self.client, 'config', None), 'endpoint', '')))
         cache_key = self.cache.key(data, model=model_identity, destination_id=self.client.destination_id,
-                                   prompt_version=PROMPT_VERSION) if self.cache else None
+                                   prompt_version=prompt_version) if self.cache else None
         cached = self.cache.get(cache_key) if self.cache else None
         if cached is not None:
             cached.update(bindings(data))
@@ -125,25 +128,30 @@ class Reviewer:
             return self.contracts.parse('ReviewDecision', cached)
         if self.request_sink is not None:
             self.request_sink(payload({"binding": bindings(data),
-                                       "prompt_version": PROMPT_VERSION,
+                                       "prompt_version": prompt_version,
                                        "model": self.client.model,
                                        "destination_id": self.client.destination_id,
                                        "messages": messages}))
-        trace['submitted'] = None  # Cancellation may leave transport state unknown.
+        trace['submitted'] = None
+        from .protocol import complete_validated
+        trace['protocol_attempts'] = []
+        def validate(text):
+            analysis = strict_json(text)
+            if compact:
+                analysis = expand(analysis, data)
+            validate_analysis(analysis, data)
+            return analysis
         try:
-            reply = await self.client.complete(messages=messages, purpose=data["phase"], prompt_version=PROMPT_VERSION)
+            analysis, usage = await complete_validated(self.client, messages, purpose=data['phase'],
+                prompt_version=prompt_version, validate=validate, attempts=trace['protocol_attempts'])
         except GuardError as exc:
             if exc.usage:
                 trace['usage'] = wire_usage(exc.usage)
                 trace['submitted'] = exc.usage['attempts'] > 0
-            elif exc.reason_code in ('CONTENT_TOO_LARGE','MODEL_CONFIGURATION_ERROR','MODEL_DESTINATION_DENIED'):
-                trace['submitted'] = False
             raise
         trace['submitted'] = True
-        trace['usage'] = wire_usage(reply.usage)
-        analysis = strict_json(reply.content)
-        validate_analysis(analysis, data)
+        trace['usage'] = wire_usage(usage)
         if self.cache and analysis['decision'] != 'NEEDS_CONTEXT':
             self.cache.put(cache_key, analysis)
-        analysis["usage"] = wire_usage(reply.usage)
-        return self.contracts.parse("ReviewDecision", analysis)
+        analysis['usage'] = wire_usage(usage)
+        return self.contracts.parse('ReviewDecision', analysis)
