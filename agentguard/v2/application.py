@@ -47,7 +47,7 @@ def load_settings(path):
         'max_turns', 'max_calls', 'max_review_bytes', 'context_strategy', 'recent_n',
         'max_attempts', 'max_tokens', 'recover_on_block', 'resources', 'tool_factory',
         'synthetic_demo', 'confirmed_authorizations'}
-    allowed.add('transforms')
+    allowed.update({'transforms', 'opencode'})
     if not isinstance(settings, dict) or set(settings) - allowed:
         raise ValueError('Unknown application configuration field')
     for key in ('workspace', 'state_directory'):
@@ -104,6 +104,10 @@ def workspace_tools(settings):
 
     def write_text(path, body):
         value = checked(path)
+        protected = [Path(p).resolve() for p in settings.get('opencode', {}).get('protected_paths', [])]
+        if any(value == item or value.is_relative_to(item) for item in protected):
+            from .execution.executor import KnownToolFailure
+            raise KnownToolFailure('HOST_CONFIGURATION_PROTECTED')
         if not isinstance(body, str) or len(body.encode('utf-8')) > 1_000_000:
             raise RuntimeFault('CONTENT_TOO_LARGE')
         value.parent.mkdir(parents=True, exist_ok=True)

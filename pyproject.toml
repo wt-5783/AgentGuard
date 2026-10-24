@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentguard"
-version = "2.0.0a2"
+version = "2.0.0a3"
 description = "AgentGuard v2 安全运行时：隔离审查、数据约束、原子许可和恢复；保留旧版 SDK"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -35,6 +35,7 @@ gateway = ["fastapi==0.156.8", "uvicorn==0.54.0", "httpx==0.28.1"]
 v2-console = ["streamlit==1.56.0", "graphviz==0.21"]
 mcp = ["mcp==1.28.1"]
 connect = ["mcp==1.28.1", "httpx==0.28.1"]
+opencode = ["fastapi==0.156.8", "uvicorn==0.54.0", "httpx==0.28.1"]
 dev = ["pytest==9.1.1", "pytest-asyncio==1.4.0", "httpx==0.28.1", "build==1.6.1", "PyYAML==6.0.3"]
 
 [project.scripts]
@@ -43,6 +44,8 @@ agentguard-v2 = "agentguard.v2.gateway.cli:main"
 agentguard-v2-agent = "agentguard.v2.application:main"
 agentguard-v2-console = "agentguard.v2.console:main"
 agentguard-v2-connect = "agentguard.v2.connect:main"
+agentguard-v2-opencode = "agentguard.v2.opencode:main"
+agentguard-v2-opencode-pair = "agentguard.v2.opencode_pair:main"
 
 [project.urls]
 Homepage = "https://github.com/HKBai9/AgentGuard"
@@ -55,6 +58,7 @@ include = ["agentguard", "agentguard.*"]
 [tool.setuptools.package-data]
 agentguard = ["data/*.yaml", "py.typed"]
 "agentguard.v2.schemas" = ["*.json"]
+"agentguard.v2" = ["opencode_plugin/*.mjs", "opencode_plugin/*.tsx"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

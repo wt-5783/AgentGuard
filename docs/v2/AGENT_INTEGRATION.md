@@ -1,5 +1,7 @@
 # OpenCode 与通用 Agent 接入
 
+2026-10-25：新增 [OpenCode 原生开关与全链路边界](OPENCODE_NATIVE.md)，本项目普通 opencode 已默认使用该原生 profile。下文是继续保留的通用 MCP 与单任务连接器，其保护范围不同。
+
 正式包提供 `agentguard-v2-connect`，不依赖 `ai/bin`、benchmarks 或源码目录。Python >= 3.12；运行时使用已有 Runtime、PolicyCompiler、GuardService 和工具注册表。MCP stdio 是跨 Agent 接入层，OpenCode 1.19.4 是本机验证目标。
 
 ## 安装
