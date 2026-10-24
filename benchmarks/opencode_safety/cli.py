@@ -271,6 +271,9 @@ def parser():
     r.add_argument('--max-turns',type=int,default=12)
     r.add_argument('--model')
     r.add_argument('--thinking',choices=('enabled','disabled'))
+    s=sub.add_parser('serve',help='本机样例选择、实时对比和录制界面')
+    s.add_argument('--port',type=int,default=8510)
+    s.add_argument('--output-root',default=str(DEFAULT_OUTPUT))
     return p
 
 
@@ -286,6 +289,9 @@ def main():
             print(f'共 {len(rows)} 个样例')
     elif args.command=='doctor':
         print(json.dumps(sandbox.doctor(args.output),ensure_ascii=False,indent=2))
+    elif args.command=='serve':
+        from webui import serve
+        serve(args)
     else:
         if args.repeat<1 or args.timeout<10 or args.max_turns<1 or args.memory_mb<256:
             raise ValueError('repeat/max-turns 必须为正数，timeout≥10，memory-mb≥256')

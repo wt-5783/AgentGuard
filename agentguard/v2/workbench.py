@@ -102,7 +102,7 @@ def render_architecture(st):
         {'层': '宿主与适配', '模块': 'application / adapters / connect / opencode_host', '职责': '固定任务、模型消息、注册工具、FINAL 和恢复握手'},
         {'层': '安全运行时', '模块': 'runtime / policy / review / execution', '职责': '宿主权限上限、语义审查、原子许可与执行'},
         {'层': '私有存储', '模块': 'state / recovery', '职责': '每执行器独立 SQLite、版本、来源与恢复日志'},
-        {'层': '独立评测', '模块': 'ai/eval', '职责': '隔离双组、固定输入、真实文件/HTTP 观测、独立评分'},
+        {'层': '独立评测', '模块': 'benchmarks/opencode_safety', '职责': '隔离双组、实时手动测试、真实文件/HTTP 观测、独立评分'},
         {'层': '兼容层', '模块': 'app.py / agentguard v1', '职责': '历史演示和 SDK；与 v2 数据及成绩分开'},
     ], hide_index=True, width='stretch')
     st.caption('每个执行器只拥有自己的状态库。UI 凭据只读，操作员凭据只能提交固定配置的任务；原生窗口和测评不共用网页 Runtime 库。')

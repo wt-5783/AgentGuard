@@ -33,7 +33,7 @@ flowchart LR
     Runtime --> Guard[GuardService / ACTION RESULT FINAL]
     Runtime --> Executor[原子许可 / 注册工具执行]
     Runtime --> State[版本 / 来源 / 私有 SQLite / 恢复]
-    UI -->|测评 API / 独立 token| Eval[ai/eval 8510]
+    UI -->|测评 API / 独立 token| Eval[benchmarks/opencode_safety 8510]
     Eval --> Sandbox[隔离 ON/OFF 两组]
     Sandbox --> Native
     Sandbox --> Oracle[文件/权限/HTTP 观测与评分]
@@ -52,7 +52,7 @@ flowchart LR
 | 状态与恢复 | `state/`, `recovery/` | 私有内容版本、来源、依赖失效、恢复计划与 ACK |
 | 部署 | `connect.py`, `integration.py`, `opencode.py`, `launch.py` | 配置模板、预检查、MCP、原生插件和服务监督 |
 | 展示 | `console.py`, `workbench.py`, `operator_console.py`, `evaluation_console.py` | 统一导航、调用服务 API 与展示证据 |
-| 测评 | `ai/eval/`（工作区独立程序） | 样例、隔离、模型出口、双组执行与评分；不随 wheel 打包 |
+| 测评 | `benchmarks/opencode_safety/`（仓库独立程序） | 样例、隔离、模型出口、双组执行与评分；不随 wheel 打包 |
 | 兼容 | `agentguard/` 的旧版模块、`app.py` | v1 SDK、旧演示和历史固定实验；不能用历史成绩替代 v2 验收 |
 
 ## 一次任务的安全链路
@@ -72,6 +72,8 @@ OpenCode 原生链路接管上述边界及恢复；原生 UI 的工具回执不�
 安装包：`agentguard-v2-workbench --config /private/application.json`（安装 `[gateway,v2-console]`）；等价于 `python -m agentguard.v2.launch`。默认同时启动 8765、8766、8502，可用 `--port`、`--operator-port`、`--ui-port` 更换。评测服务是可选外部服务，不将工作区脚本硬编码到 wheel。
 
 展示进程仅获得 UI/operator 凭据，移除配置指定的模型密钥与 host token。API 客户端限定本机 HTTP 服务、禁止重定向并限制响应大小。`AGENTGUARD_EVAL_URL` 可改评测地址；`AGENTGUARD_EVAL_TOKEN_FILE` 指向后端共享的私有提交凭据（默认 `~/.config/agentguard/eval-ui-token`），不送到浏览器。
+
+评测程序已随仓库提供：`python3 benchmarks/opencode_safety/cli.py serve`，默认结果位于用户状态目录。8510 页面可输入自定义提示词，实时并排显示两个真实 OpenCode 的执行、审查和拦截；手动任务不计入基准 ASR。详见 [测评说明](../../benchmarks/opencode_safety/README.md)。
 
 评测 `/api/runs` 列出输出根目录内的历史报告，`/api/status?run=<id>` 选择报告；`/api/detail?directory=...` 查看同根目录下的合成证据。提交带 `submission_id`，写入 `.submissions/` 后才启动子进程；同 ID 同参数返回已有接收结果，重启后不重新执行；接收状态不明确时拒绝自动重放。
 

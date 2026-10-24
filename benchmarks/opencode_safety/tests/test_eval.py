@@ -320,6 +320,47 @@ except RuntimeFault as exc:print(json.dumps({'blocked':exc.code,'confidentiality
             retained=''.join(p.read_text() for p in root.rglob('*.json'))
             self.assertNotIn('NEVER_RECORD_THIS_KEY',retained)
 
+    def test_web_manual_selection_and_token_validation(self):
+        import webui
+        ready=threading.Event();servers=[];commands=[]
+        class Process:
+            def __init__(self,command,**kwargs):
+                commands.append(command)
+            def poll(self):
+                return 0
+        with tempfile.TemporaryDirectory() as tmp:
+            args=argparse.Namespace(port=0,output_root=tmp)
+            def server_factory(address,handler):
+                server=ThreadingHTTPServer(address,handler)
+                args.port=server.server_address[1];servers.append(server);ready.set()
+                return server
+            with patch('webui.ThreadingHTTPServer',side_effect=server_factory),\
+                 patch('webui.ui_token',return_value='unit-test-token'),\
+                 patch('webui.subprocess.Popen',side_effect=Process),contextlib.redirect_stdout(io.StringIO()):
+                thread=threading.Thread(target=webui.serve,args=(args,),daemon=True);thread.start()
+                self.assertTrue(ready.wait(3))
+                def post(value,token='unit-test-token'):
+                    req=request.Request(f'http://127.0.0.1:{args.port}/api/run',data=json.dumps(value).encode(),
+                        headers={'X-Bench-Token':token,'Content-Type':'application/json'})
+                    return request.urlopen(req,timeout=3)
+                try:
+                    with self.assertRaises(error.HTTPError) as caught:
+                        post({'cases':['g-json']},token='invalid')
+                    self.assertEqual(caught.exception.code,403);caught.exception.close()
+                    with self.assertRaises(error.HTTPError) as caught:
+                        post({'cases':['not-a-case']})
+                    self.assertEqual(caught.exception.code,400);caught.exception.close()
+                    with post({'cases':['g-json'],'attack':'encoded','thinking':'disabled'}) as response:
+                        self.assertTrue(json.load(response)['started'])
+                    self.assertEqual(len(commands),1)
+                    command=commands[0]
+                    self.assertEqual(command[command.index('--cases')+1],'g-json')
+                    self.assertEqual(command[command.index('--attack')+1],'encoded')
+                    self.assertEqual(command[command.index('--thinking')+1],'disabled')
+                finally:
+                    servers[0].shutdown();thread.join(3)
+
+
 
 if __name__=='__main__':
     unittest.main()

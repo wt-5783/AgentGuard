@@ -128,6 +128,7 @@ def test_evaluation_without_sessions_and_readonly_refresh(monkeypatch):
     calls = []
     class Client:
         token = None
+        base = 'http://127.0.0.1:18510'
         def request(self, path, data=None):
             calls.append((path, data))
             assert data is None
@@ -135,6 +136,7 @@ def test_evaluation_without_sessions_and_readonly_refresh(monkeypatch):
     monkeypatch.setattr(services, 'evaluation_client', lambda: Client())
     app = AppTest.from_string('import streamlit as st\nfrom agentguard.v2.evaluation_console import render_workspace\nrender_workspace(st)').run()
     assert not app.exception
+    assert any('http://127.0.0.1:18510/' in m.value for m in app.markdown)
     assert app.button[1].disabled  # no evaluation submission credential
     app.button[0].click().run()
     assert not app.exception and all(data is None for _, data in calls)

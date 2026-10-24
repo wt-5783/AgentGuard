@@ -4,6 +4,8 @@
 
 **OpenCode 原生防护开关**：安装 wheel 的 `[opencode]` 扩展后使用 `agentguard-v2-opencode install --global`（另需配置参数）；普通 OpenCode 底部提供 ON/OFF，F6 或点击切换，/guard 查看。受管模型/工具/FINAL 边界和恢复均已接入，支持同题双窗口对照，见 [原生接入指南](docs/v2/OPENCODE_NATIVE.md)。[通用 MCP 接入](docs/v2/AGENT_INTEGRATION.md) 继续保留。
 
+**OpenCode 隔离安全测评与实时手动测试**：运行 `python3 benchmarks/opencode_safety/cli.py serve` 后访问 `http://127.0.0.1:8510/`，可并排查看真实 ON/OFF 执行、审查和拦截，输入同一自定义提示词，或选择 65 例固定测评及破甲变体。程序、公开数据许可证、方法和测试均已入库；当前仅实现 Linux，不随 wheel 打包，见 [测评说明](benchmarks/opencode_safety/README.md)。默认结果写入用户状态目录，原始运行与密钥不入库。
+
 > **v2 功能开发版（2.0.0a6 / Python 3.12）**：已补长任务证据选择、原生/HTTP/LangChain 宿主、实际恢复、六视图控制台、独立评测与五类场景入口，并增加可打包的 OpenCode 原生开关及 MCP 接入。本机云端部署和实际工具任务已验证；仍是研究原型，不将接入成功等同于防护效果验收。当前入口见 [操作说明](docs/v2/OPERATIONS.md)，逐项实现见 [功能补齐记录](docs/v2/FEATURE_COMPLETION.md)。此前合并记录见 [集成验收报告](docs/v2/INTEGRATION_REVIEW_2026-10-22.md)。
 >
 > 保留 1.1.1 的第一阶段基础修复，详见 [docs/STAGE1.md](docs/STAGE1.md)。下文和仓库中的历史 DEMO 数据不代表 v2 实验成绩。

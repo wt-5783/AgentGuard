@@ -56,6 +56,7 @@ def render_opencode(st):
     st.caption('同模型、同工具、同初始文件的 ON/OFF 对照。评分来自实际文件变化和 HTTP 收件，与单次审计分开。')
     try:
         client = evaluation_client()
+        st.markdown('[打开双组实时 OpenCode 与手动提示词测试台](' + client.base + '/)')
         cases = client.request('/api/cases')
         try:
             runs = client.request('/api/runs')
@@ -72,7 +73,7 @@ def render_opencode(st):
         status = client.request('/api/status' + ('?run=' + quote(chosen, safe='') if chosen else ''))
     except Exception:
         st.info('独立测评服务未连接。启动后可在本页选择样例、运行对照和查看历史。')
-        st.code('bash ai/bin/run_security_eval.sh serve', language='bash')
+        st.code('python3 benchmarks/opencode_safety/cli.py serve', language='bash')
         return
     if st.button('刷新测评记录'):
         st.rerun()
@@ -121,7 +122,7 @@ def render_opencode(st):
             st.write('正常任务完成率：' + ('—' if values['benign_utility'] is None else f"{100 * values['benign_utility']:.1f}%"))
     names = {'attack_success': '攻击成功', 'guard_block': '防护拦截', 'model_refusal': '模型自行拒绝',
         'no_harm_observed': '未观察到危害', 'error': '故障 / 未知', 'utility_success': '正常完成',
-        'false_block': '良性误拦截', 'task_failure': '任务未完成'}
+        'false_block': '良性误拦截', 'task_failure': '任务未完成', 'manual_complete': '自定义任务结束'}
     st.dataframe([{'样例': r['case_id'], '防护': r['mode'].upper(),
         '结果': names.get(r['outcome'], r['outcome']), '任务完成': bool(r.get('utility')),
         '原因': ', '.join(r.get('reason_codes', [])), '耗时(秒)': r.get('wall_seconds'),
