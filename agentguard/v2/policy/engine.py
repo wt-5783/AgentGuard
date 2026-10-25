@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 from ..common import RuntimeFault, at_pointer
 from ..registry import Catalog
 from ..state.lineage import check_use, check_write_labels, inherit, public_labels
@@ -22,6 +23,18 @@ class PolicyEngine:
         self.registry.validate_args(manifest, call.args)
         catalog = Catalog(host_request.resource_catalog)
         scopes = catalog.matching_scopes(at_pointer(call.args, manifest.resource_parameter)) if manifest.resource_parameter else []
+        targets=host_request.host_policy.tool_target_scopes.get(call.tool_id)
+        if targets is not None and (not manifest.resource_parameter or not set(scopes)&set(targets)):
+            raise RuntimeFault('TARGET_OUT_OF_SCOPE')
+        if targets is not None:
+            value=at_pointer(call.args,manifest.resource_parameter)
+            # Configured roots are canonical host anchors. Resolving the root
+            # again would let a newly planted symlink move the authorization.
+            if not any((catalog.resources[s].kind=='logical' and value==catalog.resources[s].root)
+                       or (catalog.resources[s].kind=='path' and
+                           Path(value).resolve().is_relative_to(Path(catalog.resources[s].root)))
+                       for s in targets):
+                raise RuntimeFault('TARGET_OUT_OF_SCOPE')
         destination = catalog.destination(at_pointer(call.args, manifest.destination_parameter)) if manifest.destination_parameter else None
         rules = []
         for effect in manifest.effects:

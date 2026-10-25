@@ -114,6 +114,9 @@ class HostPolicy(Wire):
     max_review_bytes: int = Field(gt=0)
     permit_ttl_seconds: int = Field(gt=0, le=3600)
     review_timeout_seconds: float = Field(gt=0, le=300)
+    # Optional host-only narrowing, separate from scopes of input data. An
+    # absent tool has the legacy rule boundary; [] forbids every target.
+    tool_target_scopes: dict[ID, list[ID]] = Field(default_factory=dict)
 
 
 class EvidenceRef(Wire):

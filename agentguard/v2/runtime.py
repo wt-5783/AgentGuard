@@ -487,6 +487,35 @@ class Runtime:
         return make(CallResult, session_id=call.session_id, turn_id=call.turn_id, call_id=call.call_id,
             status=status, reason_code=code, content=content, artifact_ref=ref, receipt=receipt, risk_refs=list(risk_refs))
 
+    def _label_risks(self, sid, context, host, code, use, destination=None):
+        """Connect hard label refusals to the existing context-rebuild handshake.
+
+        Revocation removes restricted data and its derivatives. It never changes
+        their labels or grants permission to reuse them in the rebuilt context.
+        """
+        if code not in ('DATA_USE_DENIED','DATA_DESTINATION_DENIED','CONFIDENTIALITY_DENIED','ARTIFACT_SCOPE_DENIED'):
+            return []
+        refs=self.lineage.closure(sid,[m.ref for m in context.messages],reverse=True)
+        catalog=Catalog(host.resource_catalog)
+        risks=[]
+        for ref in refs:
+            if not self.artifacts.is_released(sid,ref):
+                continue
+            meta=self.artifacts.metadata(sid,ref)
+            try:
+                check_use(meta.labels,use,destination,catalog=catalog)
+            except RuntimeFault as exc:
+                # Origin scope checks precede label checks. A scope refusal
+                # must still expose a proven use violation to recovery.
+                if exc.code==code or code=='ARTIFACT_SCOPE_DENIED':
+                    risks.append(self.artifacts.ref(meta))
+        # Return original restricted sources, rather than every later artifact
+        # that inherited their labels. Recovery revokes descendants itself.
+        keys={(r.artifact_id,r.version) for r in risks}
+        return [r for r in risks if not any((a.artifact_id,a.version) in keys and
+                (a.artifact_id,a.version)!=(r.artifact_id,r.version)
+                for a in self.lineage.closure(sid,[r],reverse=True))]
+
     async def execute_batch(self, req):
         req = frozen_copy(BatchRequest, req)
         self.active(req.session_id, req.context_version)
@@ -537,6 +566,7 @@ class Runtime:
     async def _execute_call(self, call):
         call = frozen_copy(ToolCall, call)
         sid = call.session_id
+        context=host=None
         try:
             state, host, policy, context = self.action_state(call)
             self.action_facts(call, host, policy, context)
@@ -579,7 +609,13 @@ class Runtime:
             if exc.code == 'SESSION_NOT_FOUND':
                 raise
             self.store.event(sid, 'CALL_BLOCKED', {'reason_code': exc.code}, turn_id=call.turn_id, call_id=call.call_id)
-            return self._result(call, 'BLOCKED', exc.code)
+            risks=[]
+            if context is not None and exc.code in ('DATA_USE_DENIED','DATA_DESTINATION_DENIED','CONFIDENTIALITY_DENIED','ARTIFACT_SCOPE_DENIED'):
+                manifest=self.registry.get(call.tool_id,call.manifest_version).manifest
+                destination=(Catalog(host.resource_catalog).destination(at_pointer(call.args,manifest.destination_parameter))
+                             if manifest.destination_parameter else None)
+                risks=self._label_risks(sid,context,host,exc.code,call.use,destination)
+            return self._result(call, 'BLOCKED', exc.code,risk_refs=risks)
         entry = self.registry.get(call.tool_id, call.manifest_version)
         args = strict_loads(canonical(call.args))
         for pointer in entry.manifest.artifact_parameters:
@@ -711,8 +747,12 @@ class Runtime:
                 status = 'RELEASED'
             except RuntimeFault as exc:
                 code = exc.code
+        risks=self._decision_risks(req.session_id, decision)
+        if status=='BLOCKED':
+            risks+=self._label_risks(req.session_id,context,host,code,
+                                    host.host_policy.final_use,host.host_policy.final_destination_id)
         result = make(FinalizedOutput, session_id=req.session_id, status=status, reason_code=code, content=content, artifact_ref=target,
-            risk_refs=self._decision_risks(req.session_id, decision))
+            risk_refs=risks)
         with self.store.transaction() as conn:
             if self.store.get(req.session_id, 'final', req.output_ref.artifact_id, conn) is None:
                 self.store.put(req.session_id, 'final', req.output_ref.artifact_id, result, conn)

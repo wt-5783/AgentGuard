@@ -47,7 +47,7 @@ def load_settings(path):
         'max_turns', 'max_calls', 'max_review_bytes', 'context_strategy', 'recent_n',
         'max_attempts', 'max_tokens', 'recover_on_block', 'resources', 'tool_factory',
         'synthetic_demo', 'confirmed_authorizations'}
-    allowed.update({'transforms', 'opencode'})
+    allowed.update({'transforms', 'opencode', 'tool_target_scopes'})
     if not isinstance(settings, dict) or set(settings) - allowed:
         raise ValueError('Unknown application configuration field')
     for key in ('workspace', 'state_directory'):
@@ -191,7 +191,8 @@ def compose(settings, task='', *, runtime=None):
         host_policy=make(HostPolicy, rules=rules, model_destination_ids=[make(ModelDestinationGrant,
             destination_id=c.destination_id, resource_scope_ids=scopes) for c in (guard, agent)],
             guard_destination_id=guard.destination_id, final_destination_id='user', final_use='reply',
-            max_review_bytes=settings.get('max_review_bytes', 96_000), permit_ttl_seconds=60, review_timeout_seconds=120.0),
+            max_review_bytes=settings.get('max_review_bytes', 96_000), permit_ttl_seconds=60, review_timeout_seconds=120.0,
+            tool_target_scopes=settings.get('tool_target_scopes',{})),
         resource_catalog=make(ResourceCatalog, resources=resources, destinations=destinations),
         tool_manifests=registry.manifests(), confirmed_authorizations=settings.get('confirmed_authorizations', []),
         synthetic_demo=settings.get('synthetic_demo', False))

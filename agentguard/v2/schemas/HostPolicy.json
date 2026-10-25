@@ -161,6 +161,25 @@
       "maximum": 300,
       "title": "Review Timeout Seconds",
       "type": "number"
+    },
+    "tool_target_scopes": {
+      "patternProperties": {
+        "^[A-Za-z0-9_.:-]+$": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.:-]+$",
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 200,
+        "minLength": 1
+      },
+      "title": "Tool Target Scopes",
+      "type": "object"
     }
   },
   "required": [

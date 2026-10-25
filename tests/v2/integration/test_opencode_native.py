@@ -97,6 +97,8 @@ async def test_risk_result_recovery_actually_resets_context_and_records_ack(tmp_
     ack = h.runtime.store.all(state.runtime_id, 'recovery_ack')[0]
     assert not ack['unsupported'] and all(ack['completed_resets'].values())
     await controller.turn('ses_recover', 'request-02', payload())
+    assert any('"excluded_resource_scope_ids":["docs"]' in m.get('content','')
+               for m in upstream.inputs[-1]['messages'] if isinstance(m.get('content'),str))
     assert 'document:docs' not in json.dumps(upstream.inputs[-1])
     assert 'CONTEXT_REBUILT' in json.dumps(upstream.inputs[-1])
 
@@ -301,3 +303,25 @@ def test_install_native_project_profile_has_no_provider_secret_and_backs_up(tmp_
     assert global_profile['plugin']==profile['plugin']
     assert json.loads((tmp_path/'state/native-project/application.json').read_text())['workspace']==str(root)
     assert json.loads(capsys.readouterr().out)['configuration']==str(tmp_path/'home/.config/opencode')
+
+
+@pytest.mark.asyncio
+async def test_recovery_names_only_host_declared_resource_examples(tmp_path):
+    h,upstream,controller=setup(tmp_path,[call(),{'content':'Use an independent source.'}],guard_mode='BLOCK')
+    entry=h.runtime.registry.get('read_document')
+    schema=json.loads(json.dumps(entry.manifest.parameters_schema))
+    schema['properties']['resource']['examples']=['docs']
+    h.runtime.registry.register(entry.manifest.model_copy(update={'manifest_version':'source-hints-v2','parameters_schema':schema}),entry.handler)
+    h.request=h.request.model_copy(update={'tool_manifests':h.runtime.registry.manifests()})
+    await controller.submit('ses_named_source','Read docs and answer.')
+    await controller.turn('ses_named_source','request-01',payload())
+    await controller.turn('ses_named_source','request-02',payload())
+    feedback=[]
+    for message in upstream.inputs[-1]['messages']:
+        text=message.get('content')
+        if isinstance(text,str) and text.startswith('{'):
+            try: value=json.loads(text)
+            except ValueError: continue
+            if value.get('type')=='security_recovery': feedback.append(value)
+    assert feedback[-1]['excluded_tool_resources']==[{'resource':'docs','tool_id':'read_document'}]
+    assert 'document:docs' not in json.dumps(feedback)

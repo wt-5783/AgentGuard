@@ -84,14 +84,24 @@ class PolicyCompiler:
                    "unresolved_requirements": ["Specify the required registered scope."]}
         messages = [{"role": "system", "content": POLICY_SYSTEM + "\nJSON example: " + dumps(example)},
                     {"role": "user", "content": dumps(selected)}]
+        compact=getattr(getattr(self.client,'config',None),'compact_protocol',False)
+        prompt_version=POLICY_PROMPT_VERSION
+        if compact:
+            from .compact import messages as indexed_messages, SUFFIX
+            messages=indexed_messages(selected)
+            prompt_version+=SUFFIX
         if self.request_sink is not None:
             self.request_sink(payload({"session_id": data["session_id"],
                                        "base_policy_version": data["current_policy_version"],
-                                       "prompt_version": POLICY_PROMPT_VERSION, "model": self.client.model,
+                                       "prompt_version": prompt_version, "model": self.client.model,
                                        "destination_id": self.client.destination_id, "messages": messages}))
         from agentguard.v2.review.protocol import complete_validated
         def validate(text):
-            candidate = payload(self.contracts.parse('PolicyCandidate', strict_json(text)))
+            value=strict_json(text)
+            if compact:
+                from .compact import expand
+                value=expand(value,data)
+            candidate = payload(self.contracts.parse('PolicyCandidate', value))
             validate_candidate(candidate, data)
             if data['current_policy_version'] is None:
                 required = {g['destination_id'] for g in data['host_policy']['model_destination_ids']}
@@ -99,7 +109,7 @@ class PolicyCompiler:
                     raise GuardError('INVALID_REFERENCE')
             return self.contracts.parse('PolicyCandidate', candidate)
         candidate, usage = await complete_validated(self.client, messages, purpose='policy',
-            prompt_version=POLICY_PROMPT_VERSION, validate=validate)
+            prompt_version=prompt_version, validate=validate)
         self.usage_records.append({'session_id': data['session_id'],
             'base_policy_version': data['current_policy_version'], 'usage': wire_usage(usage)})
         return candidate

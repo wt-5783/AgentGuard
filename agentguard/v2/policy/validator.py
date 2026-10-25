@@ -2,6 +2,7 @@
 from ..contracts import PolicyCandidate, TaskPolicy, make
 from ..common import RuntimeFault, frozen_copy, new_id
 from ..registry import Catalog
+from pathlib import Path
 
 
 def rule_key(rule):
@@ -40,6 +41,14 @@ def validate_candidate(candidate, request, registry, current=None):
         raise RuntimeFault('POLICY_BINDING_MISMATCH')
     catalog = Catalog(request.resource_catalog)
     manifests = {m.tool_id: m for m in request.tool_manifests}
+    for tool,targets in request.host_policy.tool_target_scopes.items():
+        if tool not in manifests or manifests[tool].resource_parameter is None:
+            raise RuntimeFault('INVALID_TARGET_CONSTRAINT',422)
+        if not set(targets)<=catalog.resources.keys():
+            raise RuntimeFault('UNKNOWN_RESOURCE')
+        if any(catalog.resources[s].kind=='path' and
+               str(Path(catalog.resources[s].root).resolve())!=catalog.resources[s].root for s in targets):
+            raise RuntimeFault('INVALID_TARGET_CONSTRAINT',422)
     host = {rule_key(r): r for r in request.host_policy.rules}
     if len(host) != len(request.host_policy.rules):
         raise RuntimeFault('DUPLICATE_HOST_RULE', 422)

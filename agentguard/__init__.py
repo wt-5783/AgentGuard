@@ -92,4 +92,4 @@ __all__ = [
     "build_guard",
 ]
 
-__version__ = "2.0.0a6"
+__version__ = "2.0.0a7"
