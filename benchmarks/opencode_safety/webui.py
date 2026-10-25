@@ -16,6 +16,7 @@ import time
 from suite import catalog,materialize
 from manual import custom_case
 from live import pair_view
+from recording import scene_catalog
 
 
 def ui_token():
@@ -69,11 +70,18 @@ def create_server(args):
                 return self.reply({'error':'Invalid host'},403)
             parsed=urlsplit(self.path)
             query=parse_qs(parsed.query)
-            if parsed.path=='/':
-                page=PAGE.replace('__TOKEN__',token)
+            if parsed.path in ('/', '/lab'):
+                page=(PAGE if parsed.path=='/' else LAB_PAGE).replace('__TOKEN__',token)
                 if query.get('embed')==['1']:
                     page=page.replace('<body>','<body class="embedded">')
                 return self.reply(page,content_type='text/html')
+            if parsed.path=='/api/demo':
+                p=state['process']
+                return self.reply({'scenes':scene_catalog(root,self.read_report),
+                                   'busy':p is not None and p.poll() is None})
+            if parsed.path=='/api/demo/status':
+                p=state['process']
+                return self.reply({'busy':p is not None and p.poll() is None})
             if parsed.path=='/api/cases':
                 return self.reply(catalog())
             if parsed.path=='/api/template':
@@ -298,6 +306,10 @@ def serve(args):
             state['handle'].close()
 
 
-PAGE=(Path(__file__).with_name('console.html').read_text()
+LAB_PAGE=(Path(__file__).with_name('console.html').read_text()
     .replace('__PRESENTATION__',Path(__file__).with_name('presentation.js').read_text())
     .replace('__SCRIPT__',Path(__file__).with_name('console.js').read_text()))
+PAGE=(Path(__file__).with_name('recording.html').read_text()
+    .replace('__PRESENTATION__',Path(__file__).with_name('presentation.js').read_text())
+    .replace('__RECORDING_MODEL__',Path(__file__).with_name('recording-model.js').read_text())
+    .replace('__SCRIPT__',Path(__file__).with_name('recording.js').read_text()))

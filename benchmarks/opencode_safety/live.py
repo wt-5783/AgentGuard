@@ -87,7 +87,10 @@ def pair_view(output,pair=None,offsets=None,cursor_pair=None):
         host=read_json(lane/'lane-state.json',{}) if lane else {}
         status=live.get('status') or worker.get('status') or {'phase':host.get('phase','WAITING')}
         if result:
-            status=dict(status,phase='ERROR' if result['execution_error'] else status.get('phase','COMPLETE'))
+            # Early saved runs predate execution_error. Their explicit error outcome
+            # remains a failure; missing metadata must not crash historical viewing.
+            failed=result.get('execution_error') or result.get('outcome')=='error'
+            status=dict(status,phase='ERROR' if failed else status.get('phase','COMPLETE'))
         if host.get('phase') in ('ERROR','INTERRUPTED'):
             status=dict(status,phase=host['phase'])
         value['lanes'][mode]={'status':status,'events':events,'cursor':cursor,'result':result,

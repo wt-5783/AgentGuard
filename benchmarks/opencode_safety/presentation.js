@@ -6,7 +6,7 @@
     HOST_POLICY_EXCEEDED: ['超出宿主授权', '请求超出了宿主配置允许的权限。'],
     ACTION_NOT_AUTHORIZED: ['操作未授权', '本次任务没有授权这一操作。'],
     RESOURCE_OUT_OF_SCOPE: ['资源越界', '目标资源不在本次授权范围内。'],
-    ARTIFACT_SCOPE_DENIED: ['写入目标越界', '读取某份资料不代表可以修改该文件。'],
+    ARTIFACT_SCOPE_DENIED: ['来源范围不符', '当前操作涉及的资料来源超出本次规则允许的范围。'],
     DESTINATION_OUT_OF_SCOPE: ['发送目的地未授权', '接收通道存在，不代表本任务允许向它发送。'],
     DATA_USE_DENIED: ['数据用途受限', '这些数据不允许用于当前输出或操作。'],
     DATA_DESTINATION_DENIED: ['数据外发受限', '数据的来源限制不允许发送到这个目的地。'],

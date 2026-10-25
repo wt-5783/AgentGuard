@@ -136,7 +136,7 @@ def test_evaluation_without_sessions_and_readonly_refresh(monkeypatch):
     monkeypatch.setattr(services, 'evaluation_client', lambda: Client())
     app = AppTest.from_string('import streamlit as st\nfrom agentguard.v2.evaluation_console import render_workspace\nrender_workspace(st)').run()
     assert not app.exception
-    assert [tab.label for tab in app.tabs] == ['实时防护对照', '测评报告', '历史场景对照']
+    assert [tab.label for tab in app.tabs] == ['功能实演 · 录制视频', '测评报告', '历史场景对照']
     assert app.get('iframe')[0].proto.src == 'http://127.0.0.1:18510/?embed=1'
     assert app.button[1].disabled  # no evaluation submission credential
     app.button[0].click().run()

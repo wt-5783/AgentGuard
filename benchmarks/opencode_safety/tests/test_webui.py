@@ -73,15 +73,50 @@ class WebUITests(unittest.TestCase):
                 embedded=response.read().decode()
             self.assertIn('<body>',standalone)
             self.assertIn('<body class="embedded">',embedded)
-            for control in ('id="prompt"','id="run"','id="stop"','id="lanes"','id="report-section"'):
+            for control in ('id="chapters"','id="run"','id="stop"','id="lanes"','id="recording"'):
                 self.assertIn(control,embedded)
-            self.assertIn('id="demo-nav"',embedded)
-            self.assertIn('id="detail-summary"',embedded)
+            self.assertNotIn('id="prompt"',embedded)
+            self.assertNotIn('id="cases"',embedded)
             self.assertIn('资料指令注入',embedded)
             self.assertNotIn('__PRESENTATION__',embedded)
+            self.assertNotIn('__RECORDING_MODEL__',embedded)
             self.assertEqual(standalone.replace('<body>','<body class="embedded">'),embedded)
+            with urlopen(self.base+'/lab',timeout=3) as response:
+                lab=response.read().decode()
+            self.assertIn('id="prompt"',lab)
+            scenes=self.request('/api/demo')['scenes']
+            self.assertEqual([s['case_id'] for s in scenes],['b-chinese','g-permission','g-json','b-approved-workflow'])
+            self.assertIn('system_override',scenes[2]['inputs']['source.txt'])
             popen.assert_not_called()
         self.assertFalse(self.request('/api/status')['running'])
+
+    def test_recording_catalog_keeps_failures_without_duplicating_aggregate_reports(self):
+        lane=self.root/'original'/'g-json--native--r0'/'on'
+        lane.mkdir(parents=True)
+        (lane/'case.json').write_text('{}')
+        row={'case_id':'g-json','variant':'native','repeat':0,'mode':'on',
+             'directory':str(lane),'outcome':'error'}
+        report={'rows':[row],'manifest':{'status':'failed','expected_runs':2}}
+        (self.root/'original'/'report.json').write_text(json.dumps(report))
+        (self.root/'aggregate').mkdir()
+        (self.root/'aggregate'/'report.json').write_text(json.dumps(report))
+        with patch('webui.subprocess.Popen') as popen:
+            data=self.request('/api/demo')
+            records=next(s for s in data['scenes'] if s['id']=='recovery')['records']
+            self.assertEqual(len(records),1)
+            self.assertEqual(records[0]['outcomes'],{'on':'error'})
+            self.assertEqual(records[0]['run'],'original')
+            self.assertFalse(self.request('/api/demo/status')['busy'])
+            popen.assert_not_called()
+
+    def test_historical_live_view_supports_results_before_execution_error_field(self):
+        run=self.root/'legacy';lane=run/'g-json--native--r0'/'on';lane.mkdir(parents=True)
+        (run/'cases.json').write_text(json.dumps([{'id':'g-json','variant':'native','repeat':0,'title':'Saved injection'}]))
+        for outcome in ('guard_block','error'):
+            (lane/'result.json').write_text(json.dumps({'outcome':outcome,'recoveries':1}))
+            value=self.request('/api/live?run=legacy&pair=g-json--native--r0')
+            self.assertEqual(value['lanes']['on']['result']['outcome'],outcome)
+            if outcome=='error':self.assertEqual(value['lanes']['on']['status']['phase'],'ERROR')
 
     def test_detail_exposes_recorded_counts_and_isolation_but_not_private_worker_fields(self):
         run=self.root/'recorded';lane=run/'g-json--native--r0'/'on';lane.mkdir(parents=True)
