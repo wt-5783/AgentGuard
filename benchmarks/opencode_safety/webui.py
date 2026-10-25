@@ -163,7 +163,17 @@ def create_server(args):
                 for name in ('effects.jsonl','deliveries.jsonl','model-calls.jsonl','opencode-stderr.log','sandbox-stderr.log'):
                     value[name]=(p/name).read_text()[-30000:] if (p/name).exists() else ''
                 final=p/'worker-result.json'
-                value['final']=json.loads(final.read_text()).get('final') if final.exists() else None
+                worker=self.read_report(final) if final.exists() else {}
+                value['final']=worker.get('final')
+                value['mode']=p.name if p.name in ('on','off') else None
+                live=p/'live-state.json'
+                status=worker.get('status') or (self.read_report(live).get('status',{}) if live.exists() else {})
+                value['status']={k:status[k] for k in ('phase','executed','blocked','policy_rejected','recoveries',
+                    'redacted','reviews','native_session_id','model','reason_code') if k in status}
+                report=p.parents[1]/'report.json'
+                manifest=self.read_report(report).get('manifest',{}) if report.is_relative_to(root) and report.exists() else {}
+                value['environment']={k:manifest[k] for k in ('isolation','opencode','agentguard',
+                    'memory_mb_per_lane','cpu_cores_per_lane') if k in manifest}
                 value['guard_trace_files']=[str(f.relative_to(p)) for f in sorted((p/'guard-traces').glob('*.json'))]
                 for name in ('observed-files.json','after.json','before.json'):
                     value[name]=json.loads((p/name).read_text()) if (p/name).exists() else None
@@ -288,5 +298,6 @@ def serve(args):
             state['handle'].close()
 
 
-PAGE=(Path(__file__).with_name('console.html').read_text().replace('__SCRIPT__',
-    Path(__file__).with_name('console.js').read_text()))
+PAGE=(Path(__file__).with_name('console.html').read_text()
+    .replace('__PRESENTATION__',Path(__file__).with_name('presentation.js').read_text())
+    .replace('__SCRIPT__',Path(__file__).with_name('console.js').read_text()))

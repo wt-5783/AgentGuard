@@ -75,9 +75,29 @@ class WebUITests(unittest.TestCase):
             self.assertIn('<body class="embedded">',embedded)
             for control in ('id="prompt"','id="run"','id="stop"','id="lanes"','id="report-section"'):
                 self.assertIn(control,embedded)
+            self.assertIn('id="demo-nav"',embedded)
+            self.assertIn('id="detail-summary"',embedded)
+            self.assertIn('资料指令注入',embedded)
+            self.assertNotIn('__PRESENTATION__',embedded)
             self.assertEqual(standalone.replace('<body>','<body class="embedded">'),embedded)
             popen.assert_not_called()
         self.assertFalse(self.request('/api/status')['running'])
+
+    def test_detail_exposes_recorded_counts_and_isolation_but_not_private_worker_fields(self):
+        run=self.root/'recorded';lane=run/'g-json--native--r0'/'on';lane.mkdir(parents=True)
+        (lane/'case.json').write_text(json.dumps({'id':'g-json'}))
+        (lane/'worker-result.json').write_text(json.dumps({'final':'RELEASE_READY','status':{
+            'phase':'COMPLETE','native_session_id':'ses_actual','recoveries':1,'redacted':0,
+            'reviews':{'RESULT':2},'private_key':'PRIVATE_CREDENTIAL'}}))
+        (run/'report.json').write_text(json.dumps({'manifest':{'opencode':'1.19.4',
+            'isolation':{'ready':True,'network_denied':True},'private_key':'PRIVATE_CREDENTIAL'}}))
+        from urllib.parse import urlencode
+        value=self.request('/api/detail?'+urlencode({'directory':str(lane)}))
+        self.assertEqual(value['status']['recoveries'],1)
+        self.assertEqual(value['status']['redacted'],0)
+        self.assertEqual(value['environment']['opencode'],'1.19.4')
+        self.assertTrue(value['environment']['isolation']['ready'])
+        self.assertNotIn('PRIVATE_CREDENTIAL',json.dumps(value))
 
     def test_submission_auth_idempotency_and_restart_do_not_relaunch(self):
         body = {'submission_id':'a'*32,'cases':['b-report'],'profile':'selected'}
@@ -144,9 +164,13 @@ class WebUITests(unittest.TestCase):
         first=self.request('/api/live?run=live-run')
         self.assertIsNone(first['lanes']['on']['result'])
         self.assertEqual(first['lanes']['on']['status']['phase'],'MODEL')
+        from urllib.parse import urlencode
+        detail=self.request('/api/detail?'+urlencode({'directory':str(lane)}))
+        self.assertEqual(detail['mode'],'on')
+        self.assertEqual(detail['status']['phase'],'MODEL')
+        self.assertIsNone(detail['result'])
         cursor=first['lanes']['on']['cursor']
         logger.emit('review_finished',phase='ACTION',decision='BLOCK',reason_code='ACTION_NOT_AUTHORIZED')
-        from urllib.parse import urlencode
         query=urlencode({'run':'live-run','cursor_run':str(output),'cursor_pair':'manual--native--r0','after_on':cursor})
         second=self.request('/api/live?'+query)['lanes']['on']
         self.assertEqual(len(second['events']),1)
