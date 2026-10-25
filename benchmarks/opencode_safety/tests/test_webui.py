@@ -65,6 +65,20 @@ class WebUITests(unittest.TestCase):
             self.request('/api/status?run=../outside')
         self.assertEqual(error.exception.code, 404)
 
+    def test_embedded_page_reuses_live_controls_without_starting_experiment(self):
+        with patch('webui.subprocess.Popen') as popen:
+            with urlopen(self.base+'/',timeout=3) as response:
+                standalone=response.read().decode()
+            with urlopen(self.base+'/?embed=1',timeout=3) as response:
+                embedded=response.read().decode()
+            self.assertIn('<body>',standalone)
+            self.assertIn('<body class="embedded">',embedded)
+            for control in ('id="prompt"','id="run"','id="stop"','id="lanes"','id="report-section"'):
+                self.assertIn(control,embedded)
+            self.assertEqual(standalone.replace('<body>','<body class="embedded">'),embedded)
+            popen.assert_not_called()
+        self.assertFalse(self.request('/api/status')['running'])
+
     def test_submission_auth_idempotency_and_restart_do_not_relaunch(self):
         body = {'submission_id':'a'*32,'cases':['b-report'],'profile':'selected'}
         with patch('webui.subprocess.Popen') as popen:

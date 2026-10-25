@@ -10,7 +10,7 @@
 |---|---|---|
 | 任务工作台 | `operator_console.py` → 8766 `/jobs` | 固定应用配置，独立 operator 凭据；提交幂等、失败不自动重跑 |
 | 审计记录 | `console.py` → 8765 `/v2/sessions/...` | UI 凭据只读；策略、事件、实际审查输入、内容版本、来源/恢复、用量 |
-| 安全测评 | `evaluation_console.py` → 8510 `/api/*` | 新双组实验、历史选择、独立副作用评分和证据；另保留历史三场景报告 |
+| 安全测评 | `evaluation_console.py` → 8510 页面及 `/api/*` | 默认内嵌完整实时防护对照，可直接输入提示词、停止实验、查看双组事件和证据；另有测评报告、历史场景标签页 |
 | Agent 接入 | `workbench.py` / `integration.py` | 共享能力表、生成检查/配置包命令；页面不执行安装或模型调用 |
 | 项目架构 | `workbench.py` | 服务边界和模块职责 |
 | 旧版演示 | `app.py`，通常 8501 | 独立兼容进程；配置 `AGENTGUARD_LEGACY_URL` 后内嵌，另可单独打开；未配置时显示启动命令 |
@@ -71,9 +71,11 @@ OpenCode 原生链路接管上述边界及恢复；原生 UI 的工具回执不�
 
 安装包：`agentguard-v2-workbench --config /private/application.json`（安装 `[gateway,v2-console]`）；等价于 `python -m agentguard.v2.launch`。默认同时启动 8765、8766、8502，可用 `--port`、`--operator-port`、`--ui-port` 更换。评测服务是可选外部服务，不将工作区脚本硬编码到 wheel。
 
-展示进程仅获得 UI/operator 凭据，移除配置指定的模型密钥与 host token。API 客户端限定本机 HTTP 服务、禁止重定向并限制响应大小。`AGENTGUARD_EVAL_URL` 可改评测地址；`AGENTGUARD_EVAL_TOKEN_FILE` 指向后端共享的私有提交凭据（默认 `~/.config/agentguard/eval-ui-token`），不送到浏览器。
+展示进程仅获得 UI/operator 凭据，移除配置指定的模型密钥与 host token。API 客户端限定本机 HTTP 服务、禁止重定向并限制响应大小。`AGENTGUARD_EVAL_URL` 可改评测地址；`AGENTGUARD_EVAL_TOKEN_FILE` 指向共享的私有测评提交凭据（默认 `~/.config/agentguard/eval-ui-token`）。工作台 API 客户端读取该凭据；8510 本机页面持有测评提交凭据，用于原有发送/停止鉴权，不接收模型密钥或 Runtime host token。
 
 评测程序已随仓库提供：`python3 benchmarks/opencode_safety/cli.py serve`，默认结果位于用户状态目录。8510 页面可输入自定义提示词，实时并排显示两个真实 OpenCode 的执行、审查和拦截；手动任务不计入基准 ASR。详见 [测评说明](../../benchmarks/opencode_safety/README.md)。
+
+工作台「安全测评」默认进入「实时防护对照」，通过 8510 的 `/?embed=1` 页面复用完整操作界面；嵌入模式仅隐藏重复页头，运行、停止、实时事件和证据仍来自同一后端。服务地址沿用 `AGENTGUARD_EVAL_URL`，可单独打开原页面。浏览和切换标签不会启动实验；点击发送才创建新的隔离双组任务。服务未连接时显示启动说明，不加载空白框架。「测评报告」保留原有批次提交和统计，「历史场景对照」保留已有报告。
 
 评测 `/api/runs` 列出输出根目录内的历史报告，`/api/status?run=<id>` 选择报告；`/api/detail?directory=...` 查看同根目录下的合成证据。提交带 `submission_id`，写入 `.submissions/` 后才启动子进程；同 ID 同参数返回已有接收结果，重启后不重新执行；接收状态不明确时拒绝自动重放。
 

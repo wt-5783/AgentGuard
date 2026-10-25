@@ -37,10 +37,12 @@ def render(st,report):
 
 
 def render_workspace(st):
-    tabs = st.tabs(['OpenCode 双组测评', '历史场景对照'])
+    tabs = st.tabs(['实时防护对照', '测评报告', '历史场景对照'])
     with tabs[0]:
-        render_opencode(st)
+        render_live(st)
     with tabs[1]:
+        render_opencode(st)
+    with tabs[2]:
         path = os.environ.get('AGENTGUARD_V2_REPORT')
         if not path:
             st.info('未配置历史场景报告。OpenCode 独立测评在左侧标签页查看。')
@@ -51,12 +53,26 @@ def render_workspace(st):
                 st.info('历史场景报告暂不可读。')
 
 
+def render_live(st):
+    from .services import evaluation_client
+    try:
+        client = evaluation_client()
+        client.request('/api/cases')
+    except Exception:
+        st.info('实时对照服务未连接。启动测评服务后刷新，即可在工作台内输入任务并查看两侧执行。')
+        st.code('python3 benchmarks/opencode_safety/cli.py serve', language='bash')
+        return
+    st.caption('输入同一任务，在隔离环境中对比防护关闭 / 开启的实际执行、审查与结果。点击发送后调用云端模型。')
+    st.link_button('单独打开实时对照', client.base + '/')
+    from streamlit.components.v1 import iframe
+    iframe(client.base + '/?embed=1', height=1150, scrolling=True)
+
+
 def render_opencode(st):
     from .services import evaluation_client
     st.caption('同模型、同工具、同初始文件的 ON/OFF 对照。评分来自实际文件变化和 HTTP 收件，与单次审计分开。')
     try:
         client = evaluation_client()
-        st.markdown('[打开双组实时 OpenCode 与手动提示词测试台](' + client.base + '/)')
         cases = client.request('/api/cases')
         try:
             runs = client.request('/api/runs')

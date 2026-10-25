@@ -70,7 +70,10 @@ def create_server(args):
             parsed=urlsplit(self.path)
             query=parse_qs(parsed.query)
             if parsed.path=='/':
-                return self.reply(PAGE.replace('__TOKEN__',token),content_type='text/html')
+                page=PAGE.replace('__TOKEN__',token)
+                if query.get('embed')==['1']:
+                    page=page.replace('<body>','<body class="embedded">')
+                return self.reply(page,content_type='text/html')
             if parsed.path=='/api/cases':
                 return self.reply(catalog())
             if parsed.path=='/api/template':
