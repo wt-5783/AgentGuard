@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import shlex
 import signal
 import subprocess
 import time
@@ -16,8 +17,21 @@ from sandbox import tool_command
 from live import emit, display_args
 
 
+def command_argv(command, allowed):
+    if not allowed:
+        return ['/usr/bin/timeout','-k','1','8','/bin/bash','-c',command]
+    words=shlex.split(command)
+    if len(words)<2 or words[0]!='cat' or any(w.startswith('-') for w in words[1:]):
+        raise KnownToolFailure('READONLY_COMMAND_REQUIRED')
+    paths=[str((Path('/workspace')/w).resolve()) for w in words[1:]]
+    if not set(paths)<=set(allowed):
+        raise KnownToolFailure('READONLY_COMMAND_REQUIRED')
+    return ['/usr/bin/timeout','-k','1','8','/usr/bin/cat','--',*paths]
+
+
 def tools(settings):
     registry = ToolRegistry()
+    readonly_files=settings.get('readonly_command_files',[])
     destinations = {d['destination_id']:d['address'] for d in settings['network_destinations']}
 
     def checked(path):
@@ -80,7 +94,7 @@ def tools(settings):
             if Path(path).resolve()!=Path('/workspace'):
                 raise KnownToolFailure('INVALID_COMMAND_CWD')
             # A nested namespace hides the runtime, broker, evidence and credentials.
-            argv=tool_command(['/usr/bin/timeout','-k','1','8','/bin/bash','-c',command])
+            argv=tool_command(command_argv(command,readonly_files),readonly=bool(readonly_files))
             with Path('/tmp/command-output').open('w+b') as log:
                 p=subprocess.Popen(argv,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
                 try:
@@ -105,14 +119,14 @@ def tools(settings):
         return record('send_http',{'destination':destination,'body':body},run)
 
     specs=[
-        ('read_text',read_text,['READ'],{'path':{'type':'string'}},'/path',None,'text/plain'),
+        ('read_text',read_text,['READ'],{'path':{'type':'string','examples':['/workspace/source.txt','/workspace/reference.txt']}},'/path',None,'text/plain'),
         ('write_text',write_text,['WRITE'],{'path':{'type':'string'},'body':{'type':'string'}},'/path',None,'application/json'),
         ('delete_path',delete_path,['DELETE'],{'path':{'type':'string'}},'/path',None,'application/json'),
-        ('run_command',run_command,['READ','WRITE','DELETE'],{'path':{'type':'string'},'command':{'type':'string'}},'/path',None,'application/json'),
+        ('run_command',run_command,['READ'] if readonly_files else ['READ','WRITE','DELETE'],{'path':{'type':'string'},'command':{'type':'string'}},'/path',None,'application/json'),
         ('send_http',send_http,['SEND'],{'destination':{'type':'string','enum':list(destinations)},'body':{'type':'string'}},None,'/destination','application/json'),
     ]
     for name,handler,effects,props,scope,dest,media in specs:
-        registry.register(make(ToolManifest,tool_id=name,manifest_version='benchmark-v1',effects=effects,
+        registry.register(make(ToolManifest,tool_id=name,manifest_version='benchmark-v2-readonly' if name=='run_command' and readonly_files else 'benchmark-v2-source-hints' if name=='read_text' else 'benchmark-v1',effects=effects,
             parameters_schema={'type':'object','properties':props,'required':list(props),'additionalProperties':False},
             resource_parameter=scope,destination_parameter=dest,artifact_parameters={},return_media_type=media,
             supports_idempotency_key=False,output_labels=public_labels('external'),synthetic_demo=True),handler)

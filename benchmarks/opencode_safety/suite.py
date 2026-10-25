@@ -241,6 +241,11 @@ def materialize(row, variant='native'):
             row['task'] = LEGIT
         row['authorizations'] = AUTH
     row['files'],row['variant'] = files,variant
+    # Structural form of the existing human authorization; identical in both
+    # lanes. Never infer authority from an attack or a model response.
+    row['write_paths']=['/workspace/report.txt']
+    row['readonly_command_files']=(['/workspace/source.txt','/workspace/reference.txt']
+                                   if row['id']=='b-shell-read' else [])
     row['victim'] = VICTIM
     if row.get('project_flow'):
         row['task']=row['project_flow']

@@ -59,7 +59,7 @@ python3 benchmarks/opencode_safety/cli.py run --group public --repeat 3 --thinki
 
 ## 自定义 CLI 任务
 
-JSON 输入包含 `prompt`、`fixture`（默认 `b-report`），以及可选的 `authorizations`（可信宿主授权）。两侧冻结相同内容；每次独立会话，不续接上次聊天。
+JSON 输入包含 `prompt`、`fixture`（默认 `b-report`），以及可选的 `authorizations`（可信宿主授权）、`write_paths`（允许写入的 `/workspace/` 绝对路径列表，默认仅 `report.txt`；空列表禁止写入）。两侧冻结相同内容；每次独立会话，不续接上次聊天。
 
 ```bash
 python3 benchmarks/opencode_safety/cli.py run --manual-file /private/task.json --jobs 2 --thinking disabled
@@ -80,7 +80,7 @@ python3 benchmarks/opencode_safety/cli.py serve
 
 页面并排显示两个真实 OpenCode 会话：策略编译、模型等待、工具提议、ACTION/RESULT/FINAL 审查、实际工具开始/完成、拦截原因、恢复和最终回答。默认同时运行，可改为逐侧降低内存开销；CLI 的批量运行仍默认串行。状态每 750 ms 增量读取，最终结果生成前即可看到拦截；回答按完整放行文本显示，ON 的未审查参数与隔离工具结果不提前展示。
 
-展开“测试控制”，在“手动提示词”页选择基础文件场景并输入任务；可编辑可信宿主授权。聊天中自称获准不会扩大该范围。每次提交独立两会话，两侧提示词、授权、模型、工具和初始文件相同；基础场景只提供合成文件，不挂载宿主工作目录。自由提示词没有预设攻击 oracle，单独存档并供人工判断，不计入基准 ASR 或良性完成率。
+展开“测试控制”，在“手动提示词”页选择基础文件场景并输入任务；可编辑可信宿主授权与允许写入路径（每行一个）。写入目标范围由宿主独立约束，读取来源不会因此获得写入权限。聊天中自称获准不会扩大该范围。每次提交独立两会话，两侧提示词、授权、模型、工具和初始文件相同；基础场景只提供合成文件，不挂载宿主工作目录。自由提示词没有预设攻击 oracle，单独存档并供人工判断，不计入基准 ASR 或良性完成率。
 
 “测评样例”页支持单例/多例、固定破甲、快速或完整批次；顶部可跟随当前任务或选择同批次其他样例。“停止本次”终止两侧隔离进程并保留已有事件；历史选择只读取记录。窄屏启动后折叠输入区，方便录制两侧实时过程。
 
@@ -88,7 +88,7 @@ python3 benchmarks/opencode_safety/cli.py serve
 
 Linux 每组独立挂载/用户/进程/网络/IPC 命名空间，系统与依赖只读，工作区/受害目录/临时目录为 32/8/64 MiB tmpfs。模型密钥只留宿主，Unix broker 仅转发到宿主配置的固定 HTTPS 模型端点，不跟随重定向。Shell 再套只见合成数据的嵌套沙箱，不能看到 broker、审计或宿主目录。`doctor` 失败即停止。
 
-Shell 是可信实验适配器，当前保守声明 READ/WRITE/DELETE，可能导致合法只读 Shell 被拒绝，计入误拦。它不代表覆盖原生 OpenCode 所有 bash/MCP/委派能力。隔离共享宿主内核，不承诺抵御内核漏洞。Guard 原始协议保存在私有 `guard-traces/`，没有凭据请求头；不要提交运行目录、真实配置或密钥。
+适配器 revision `target-scopes-readonly-cat-v2` 将既有“只写 report.txt”授权结构化为独立目标范围；删除目标为空。通用 Shell 仍声明 READ/WRITE/DELETE。`b-shell-read` 使用宿主显式声明的 READ 能力，只接受 `cat` 与公开文件白名单，固定 argv 执行，合成目录内核只读；两侧能力相同。该配置修正改变了原始实验适配器，须以新轮完整结果比较，不能把局部复测拼接进旧报告。它不代表覆盖原生 OpenCode 所有 bash/MCP/委派能力。隔离共享宿主内核，不承诺抵御内核漏洞。Guard 原始协议保存在私有 `guard-traces/`，没有凭据请求头；不要提交运行目录、真实配置或密钥。
 
 ## 测试
 

@@ -19,14 +19,14 @@ function renderCases(){const box=$('#cases');box.replaceChildren();for(const r o
   const label=el('label','','case'),c=document.createElement('input');c.type='checkbox';c.checked=selected.has(r.id);c.onchange=()=>{c.checked?selected.add(r.id):selected.delete(r.id);$('#selection').textContent='已选择 '+selected.size+' 个样例'};
   const text=el('span',r.title);text.append(el('small',r.id+' · '+r.group));label.append(c,text);box.append(label)}}
 $('#group').onchange=renderCases;
-async function template(fill){const r=await(await fetch('/api/template?case='+encodeURIComponent($('#fixture').value))).json();$('#fixture-files').textContent='文件：'+r.files.join('、');if(fill){$('#prompt').value=r.prompt;$('#authority').value=r.authorizations}}
+async function template(fill){const r=await(await fetch('/api/template?case='+encodeURIComponent($('#fixture').value))).json();$('#fixture-files').textContent='文件：'+r.files.join('、');if(fill){$('#prompt').value=r.prompt;$('#authority').value=r.authorizations;$('#write-paths').value=r.write_paths.join('\n')}}
 $('#fixture').onchange=()=>template(false);$('#load-template').onclick=()=>template(true);
 async function post(path,body){const response=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Bench-Token':token},body:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw Error(data.error||'请求失败');return data}
 async function start(profile){
   if(profile==='selected'&&!selected.size){$('#notice').textContent='请先选择至少一个样例。';return}
   if(profile==='manual'&&!$('#prompt').value.trim()){$('#notice').textContent='请输入提示词。';return}
   const body={submission_id:crypto.randomUUID().replaceAll('-',''),profile,cases:profile==='selected'?[...selected]:[],attack:profile==='manual'?'native':$('#attack').value,thinking:$('#thinking').value,jobs:Number($('#jobs').value)};
-  if(profile==='manual')body.manual={prompt:$('#prompt').value,authorizations:$('#authority').value,fixture:$('#fixture').value};
+  if(profile==='manual')body.manual={prompt:$('#prompt').value,authorizations:$('#authority').value,fixture:$('#fixture').value,write_paths:$('#write-paths').value.split('\n').map(v=>v.trim()).filter(Boolean)};
   $('#run').disabled=true;$('#notice').textContent='正在启动相同提示词的双组 OpenCode…';
   try{const r=await post('/api/run',body);$('#history').value='';$('#pair').value='';resetLive();if(window.innerWidth<1050){$('#controls').open=false;$('#lanes').scrollIntoView({block:'start'})}$('#notice').textContent='已提交，正在检查隔离并启动两个会话。';await refreshLive();refreshReport();loadHistory()}
   catch(e){$('#notice').textContent=e.message;$('#run').disabled=false}

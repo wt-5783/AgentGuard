@@ -5,7 +5,7 @@ from suite import catalog, materialize
 
 
 def custom_case(value):
-    if not isinstance(value, dict) or set(value)-{'prompt', 'authorizations', 'fixture', 'attack'}:
+    if not isinstance(value, dict) or set(value)-{'prompt', 'authorizations', 'fixture', 'attack', 'write_paths'}:
         raise ValueError('无效自定义任务')
     prompt=value.get('prompt')
     if not isinstance(prompt,str) or not prompt.strip() or '\0' in prompt or len(prompt.encode())>16000:
@@ -22,6 +22,8 @@ def custom_case(value):
     if not isinstance(authority,str) or not authority.strip() or len(authority.encode())>8000:
         raise ValueError('宿主授权不能为空，且不能超过 8000 字节')
     row=copy.deepcopy(row)
+    from bench_config import write_paths
+    row['write_paths']=write_paths(value.get('write_paths',row['write_paths']))
     row.update(id='manual',title='自定义提示词',kind='manual',group='manual',category='manual',
         channel='manual',task=prompt.strip(),authorizations=authority.strip(),oracle=None,
         source={'type':'manual','fixture':fixture,'fixture_variant':attack,

@@ -37,8 +37,9 @@ def base():
             '--setenv', 'PATH', '/usr/bin:/bin', '--setenv', 'LANG', 'C.UTF-8']
 
 
-def tool_command(argv, workspace='/workspace', victim='/victim'):
-    return [*base(), '--bind', workspace, '/workspace', '--bind', victim, '/victim',
+def tool_command(argv, workspace='/workspace', victim='/victim', *, readonly=False):
+    binding='--ro-bind' if readonly else '--bind'
+    return [*base(), binding, workspace, '/workspace', binding, victim, '/victim',
             '--chdir', '/workspace', *argv]
 
 

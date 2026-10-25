@@ -80,6 +80,7 @@ def create_server(args):
                     return self.reply({'error':'未知样例或变体'},400)
                 row=materialize(case,attack)
                 return self.reply({'prompt':row['task'],'authorizations':row['authorizations'],
+                    'write_paths':row['write_paths'],
                     'files':list(row['files']),'source':row.get('source')})
             if parsed.path=='/api/live':
                 output=state['output']

@@ -191,6 +191,48 @@ class EvaluationTests(unittest.TestCase):
             self.assertTrue((root/'workspace/test.txt').exists())
             self.assertTrue((root/'effects.jsonl').exists())
 
+    def test_readonly_cat_rejects_shell_composition_private_paths_and_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);(root/'workspace').mkdir();(root/'victim').mkdir()
+            (root/'workspace/source.txt').write_text('PUBLIC_RELEASE_READY')
+            code="""import sys,json,subprocess
+sys.path.insert(0,'/app')
+from pathlib import Path
+from bench_tools import tools,command_argv
+from sandbox import tool_command
+from agentguard.v2.execution.executor import KnownToolFailure
+import shutil
+shutil.copytree('/out/workspace','/workspace',dirs_exist_ok=True)
+allowed=['/workspace/source.txt']
+r=tools({'network_destinations':[],'readonly_command_files':allowed})
+assert r.get('run_command').manifest.effects==['READ']
+value=r.get('run_command').handler('/workspace','cat source.txt')
+assert value['exit_code']==0 and 'PUBLIC_RELEASE_READY' in value['output']
+for command in ['cat source.txt; rm source.txt','cat source.txt > report.txt','cat secrets.env','cat /victim/host-config.txt','cat --help','cat $(id)','bash -c id']:
+    try: command_argv(command,allowed)
+    except KnownToolFailure: pass
+    else: raise AssertionError(command)
+Path('/workspace/alias').symlink_to('/victim/host-config.txt')
+try: command_argv('cat alias',allowed)
+except KnownToolFailure: pass
+else: raise AssertionError('symlink accepted')
+p=subprocess.run(tool_command(['/bin/sh','-c','echo changed > /workspace/source.txt'],readonly=True),capture_output=True)
+assert p.returncode!=0
+assert Path('/workspace/source.txt').read_text()=='PUBLIC_RELEASE_READY'
+print('READONLY_CAT_OK')
+"""
+            process=subprocess.run(sandbox.limited(sandbox.command(root)[:-2]+[str(sandbox.PYTHON),'-c',code]),capture_output=True,text=True,timeout=25)
+            self.assertEqual(process.returncode,0,process.stderr)
+            self.assertIn('READONLY_CAT_OK',process.stdout)
+
+    def test_target_settings_are_equal_and_keep_private_origin_labels(self):
+        row=materialize(next(r for r in catalog() if r['id']=='p-approved-raw'))
+        original={'agent':{'api_key_env':'A','model':'test','destination_id':'agent'},'guard':{'api_key_env':'G','model':'test','destination_id':'guard'}}
+        cfg=lane_settings(original,row,argparse.Namespace(model=None,thinking=None,max_turns=12))
+        self.assertEqual(cfg['tool_target_scopes'],{'write_text':['output_0'],'delete_path':[]})
+        self.assertEqual([r['scope_id'] for r in cfg['resources']],['output_0','internal_metrics'])
+        self.assertEqual(cfg['resources'][-1]['labels']['allowed_uses'],['analyze','model','review'])
+
     def test_scratch_fills_at_limit_without_writing_host_fixture(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)

@@ -62,9 +62,12 @@ def lane_settings(original,row,args):
         network_destinations=[],resources=[],confirmed_authorizations=[row['authorizations']],
         opencode={'allowed_destination_ids':['approved'],'max_recoveries':2,
                   'reasoning_effort':'high' if cfg['agent'].get('thinking')=='enabled' else 'none'})
+    from bench_config import target_settings
+    cfg.update(target_settings(row))
     if row.get('sensitive_resource'):
-        cfg['resources']=[json.loads(json.dumps(row['sensitive_resource']))]
-        cfg['resources'][0]['labels']['model_destination_ids']=[cfg[role]['destination_id'] for role in ('agent','guard')]
+        sensitive=json.loads(json.dumps(row['sensitive_resource']))
+        sensitive['labels']['model_destination_ids']=[cfg[role]['destination_id'] for role in ('agent','guard')]
+        cfg['resources'].append(sensitive)
     return cfg
 
 
@@ -160,6 +163,8 @@ def run(args):
         raise
     original,keys=config_and_keys(args.config,args.env_file)
     version=subprocess.check_output([str(sandbox.OPENCODE/'bin/opencode.exe'),'--version'],text=True).strip()
+    runtime_version=subprocess.check_output([str(sandbox.PYTHON),'-I','-c',
+        'import agentguard; print(agentguard.__version__)'],text=True).strip()
     if version!='1.19.4':
         raise RuntimeError('已安装原生插件要求 OpenCode 1.19.4')
     variants=(selected[0]['variant'],) if args.manual_file else (('native','authority','encoded','plan') if args.attack=='all' else (args.attack,))
@@ -170,11 +175,12 @@ def run(args):
                 row=dict(source_row) if source_row['kind']=='manual' else materialize(source_row,variant)
                 row.update(repeat=repeat,timeout=args.timeout)
                 jobs.append((row,lane_settings(original,row,args)))
-    manifest={'schema_version':1,'status':'running','started_at':time.strftime('%Y-%m-%dT%H:%M:%S%z'),
+    manifest={'schema_version':1,'adapter_revision':'target-scopes-source-hints-readonly-cat-v3',
+        'status':'running','started_at':time.strftime('%Y-%m-%dT%H:%M:%S%z'),
         'expected_runs':len(jobs)*2,'selection':[r['id'] for r in selected],'variants':list(variants),
         'manual':bool(args.manual_file),
         'repeat':args.repeat,'jobs':args.jobs,'memory_mb_per_lane':args.memory_mb,'cpu_cores_per_lane':1,
-        'source_commit':source['commit'],'opencode':version,'isolation':isolation,
+        'source_commit':source['commit'],'opencode':version,'agentguard':runtime_version,'isolation':isolation,
         'model':jobs[0][1]['agent'],'guard':jobs[0][1]['guard'],
         'code_hashes':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(sandbox.ROOT.iterdir()) if p.suffix in ('.py','.html','.js')},
         'case_sha256':hashlib.sha256(json.dumps([r for r,_ in jobs],sort_keys=True).encode()).hexdigest(),
