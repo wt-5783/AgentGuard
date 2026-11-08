@@ -231,6 +231,53 @@ async def test_unknown_effect_is_not_retried_or_exposed(tmp_path):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['on', 'off'])
+async def test_missing_native_file_returns_receipt_and_allows_independent_source(tmp_path, mode):
+    from agentguard.v2.application import workspace_tools
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir()
+    (workspace / 'reference.txt').write_text('Independent release record.')
+    reader = workspace_tools({'workspace': str(workspace)}).get('read_text').handler
+    h, upstream, controller = setup(tmp_path / 'harness', [call(), call(), {'content': 'Used independent reference.'}], mode=mode)
+    paths = iter([workspace / 'missing.txt', workspace / 'reference.txt'])
+    def read_document(resource):
+        return reader(str(next(paths)))
+    entry = h.runtime.registry.get('read_document')
+    h.runtime.registry.register(entry.manifest.model_copy(update={'manifest_version': 'missing-file'}), read_document)
+    h.request = h.request.model_copy(update={'tool_manifests': h.runtime.registry.manifests()})
+    await controller.submit('ses_missing', 'Read the release record, or use the independent reference.')
+    first = await controller.turn('ses_missing', 'request-01', payload())
+    receipt = json.loads(first['choices'][0]['message']['tool_calls'][0]['function']['arguments'])['receipt']
+    observed = controller.receipt('ses_missing', 'ag_read_document', receipt)
+    assert observed['status'] == 'FAILED_KNOWN' and observed['reason_code'] == 'TOOL_FAILED_BEFORE_EFFECT'
+    assert controller.status()['blocked'] == 0 and controller.status()['terminal'] is None
+    await controller.turn('ses_missing', 'request-02', payload())
+    final = await controller.turn('ses_missing', 'request-03', payload())
+    assert final['choices'][0]['message']['content'] == 'Used independent reference.'
+    assert 'Independent release record.' in json.dumps(upstream.inputs[-1])
+    assert controller.status()['recoveries'] == 0
+    assert 'READ_FAILED_BEFORE_EFFECT' not in json.dumps(upstream.inputs)
+
+
+@pytest.mark.asyncio
+async def test_off_unknown_effect_stops_without_replay_or_backend_error_text(tmp_path):
+    h, _, controller = setup(tmp_path, [call('write_report', {'resource': 'reports', 'body': 'synthetic'})], mode='off')
+    def uncertain(resource, body):
+        h.effects.append(('committed', resource))
+        raise ValueError('PRIVATE_BACKEND_DIAGNOSTIC')
+    entry = h.runtime.registry.get('write_report')
+    h.runtime.registry.register(entry.manifest.model_copy(update={'manifest_version': 'uncertain'}), uncertain)
+    h.request = h.request.model_copy(update={'tool_manifests': h.runtime.registry.manifests()})
+    await controller.submit('ses_uncertain', 'Write a report.')
+    with pytest.raises(RuntimeFault, match='HOST_REVIEW_OR_EFFECT_PENDING'):
+        await controller.turn('ses_uncertain', 'request-01', payload())
+    with pytest.raises(RuntimeFault, match='HOST_FAILED_CLOSED'):
+        await controller.turn('ses_uncertain', 'request-02', payload())
+    assert len(h.effects) == 1
+    assert 'PRIVATE_BACKEND_DIAGNOSTIC' not in json.dumps(controller.status())
+
+
+@pytest.mark.asyncio
 async def test_quota_is_enforced_before_native_backend_dispatch(tmp_path):
     h, _, controller = setup(tmp_path, [call()])
     policy = h.request.host_policy.model_copy(update={'rules': [r.model_copy(update={'max_calls': 0}) for r in h.request.host_policy.rules]})

@@ -277,7 +277,7 @@ def parser():
     r.add_argument('--max-turns',type=int,default=12)
     r.add_argument('--model')
     r.add_argument('--thinking',choices=('enabled','disabled'))
-    s=sub.add_parser('serve',help='本机样例选择、实时对比和录制界面')
+    s=sub.add_parser('serve',help='本机样例选择、实时对比和演示界面')
     s.add_argument('--port',type=int,default=8510)
     s.add_argument('--output-root',default=str(DEFAULT_OUTPUT))
     return p
