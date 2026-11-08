@@ -73,7 +73,7 @@ class WebUITests(unittest.TestCase):
                 embedded=response.read().decode()
             self.assertIn('<body>',standalone)
             self.assertIn('<body class="embedded">',embedded)
-            for control in ('id="chapters"','id="run"','id="stop"','id="lanes"','id="recording"'):
+            for control in ('id="chapters"','id="run"','id="stop"','id="lanes"','id="fullscreen"'):
                 self.assertIn(control,embedded)
             self.assertNotIn('id="prompt"',embedded)
             self.assertNotIn('id="cases"',embedded)

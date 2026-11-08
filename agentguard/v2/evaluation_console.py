@@ -37,7 +37,7 @@ def render(st,report):
 
 
 def render_workspace(st):
-    tabs = st.tabs(['功能实演 · 录制视频', '测评报告', '历史场景对照'])
+    tabs = st.tabs(['功能演示', '测评报告', '历史场景对照'])
     with tabs[0]:
         render_live(st)
     with tabs[1]:
@@ -62,8 +62,7 @@ def render_live(st):
         st.info('实时对照服务未连接。启动测评服务后刷新，即可在工作台内输入任务并查看两侧执行。')
         st.code('python3 benchmarks/opencode_safety/cli.py serve', language='bash')
         return
-    st.caption('按四幕顺序展示真实任务、文件产物与防护过程。每幕点击一次运行；已有记录会明确标注。')
-    st.link_button('打开独立录制画面', client.base + '/')
+    st.link_button('打开演示页面', client.base + '/')
     from streamlit.components.v1 import iframe
     iframe(client.base + '/?embed=1', height=1150, scrolling=True)
 

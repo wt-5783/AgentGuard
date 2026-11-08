@@ -28,17 +28,16 @@ for(const side of ['off','on']){
 }
 function renderControls(){
   $('#run').disabled=!scenes.length||busy||submitting;
-  $('#run').textContent=submitting?'正在启动…':active?.live&&busy?'正在运行…':active?'重新运行这一幕':'运行这一幕';
+  $('#run').textContent=submitting?'正在启动…':active?.live&&busy?'正在运行…':active?'重新运行':'运行演示';
   $('#stop').hidden=!(busy&&active?.live);$('#next').disabled=busy||submitting;
   $('#history').disabled=busy||submitting;for(const b of $('#chapters').children)b.disabled=busy||submitting;
-  $('#next').textContent=index===scenes.length-1?'回到第一幕 ↺':'下一幕 →';
+  $('#next').textContent=index===scenes.length-1?'回到第一个场景 ↺':'下一个场景 →';
 }
 function renderScene(){
   const s=scene();if(!s)return;
-  setText('#chapter-number','SCENE '+String(index+1).padStart(2,'0')+' / '+String(scenes.length).padStart(2,'0'));
   setText('#scene-title',s.title);setText('#task',s.task);setText('#boundary',s.boundary);setText('#watch',s.watch);
   for(const [i,b] of [...$('#chapters').children].entries())b.setAttribute('aria-current',i===index?'step':'false');
-  setText('#notice','');renderControls();render();
+  $('#run-details').open=false;setText('#notice','');renderControls();render();
 }
 function choose(next){
   if(busy||submitting||!scenes.length)return;
@@ -76,7 +75,7 @@ function artifact(side,value){
 function render(){
   if(!scene())return;
   const badge=$('#source-badge');badge.className='source-badge'+(active?(active.live?' live':' history'):'');
-  badge.textContent=!active?'尚未运行':active.live?(busy?'本次真实运行 · 进行中':'本次真实运行'):'已有真实记录 · 非实时运行';
+  badge.textContent=!active?'尚未运行':active.live?(busy?'运行中':'本次运行'):'历史记录 · 非实时';
   for(const side of ['off','on']){
     const lane=active?.lanes?.[side],detail=active?.details?.[side],events=active?.events?.[side]||[];
     setText('#'+side+'-phase',lane?.result?(ui.outcomes[lane.result.outcome]||lane.result.outcome):phases[lane?.status?.phase]||'等待运行');
@@ -92,20 +91,20 @@ function render(){
     $('#'+side+'-events').disabled=!lane;$('#'+side+'-evidence').disabled=!detail;
   }
   const detail=active?.details?.on||active?.details?.off,environment=detail?.environment;
-  $('#environment').disabled=!detail;
+  $('#run-details').hidden=!active;$('#environment').disabled=!detail;
   setText('#isolation',environment?.isolation?explain.isolation(environment).title+' · '+(environment.isolation.ready?'合成文件 / 本机接收端':'查看探针详情'):'隔离检查将在运行时执行 · 仅使用合成文件与本机接收端');
-  const record=active?('记录 '+active.run+' · '+active.pair):'相同提示词 · 相同初始文件 · 相同模型 · 独立隔离环境';
+  const record=active?('记录 '+active.run+' · '+active.pair):'';
   setText('#record-line',record);renderControls();
 }
 function newRecord(run,pair,live){return {run,pair,live,lanes:{},events:{off:[],on:[]},interventions:{off:explain.fresh(),on:explain.fresh()},details:{},offsets:{off:0,on:0},output:'',detailKeys:{}}}
 async function start(){
-  if(busy||submitting)return;submitting=true;renderControls();setText('#notice','正在提交本幕任务…');
+  if(busy||submitting)return;submitting=true;renderControls();setText('#notice','正在启动…');
   const selected=scene(),ticket=++generation;
   try{
     const result=await post('/api/run',ui.request(selected,crypto.randomUUID().replaceAll('-','')));
     if(ticket!==generation)return;
     active=newRecord(result.output.split('/').pop(),selected.case_id+'--native--r0',true);
-    saved.set(selected.id,active);busy=true;setText('#notice','已启动。等待真实执行，无需刷新页面。');render();await refresh();
+    saved.set(selected.id,active);busy=true;setText('#notice','已启动，等待执行。');render();await refresh();
   }catch(e){setText('#notice','未能启动：'+e.message)}finally{submitting=false;renderControls()}
 }
 async function refresh(){
@@ -124,8 +123,8 @@ async function refresh(){
     }
     render();
     if(value.run_state?.error)setText('#notice',value.run_state.error);
-    else if(value.running)setText('#notice','真实会话正在执行。可以展开执行过程；等待模型响应时画面不会模拟进度。');
-    else setText('#notice',current.live?'本幕执行已结束，可查看产物和证据，或进入下一幕。':'正在查看已保存的真实记录；没有启动模型。');
+    else if(value.running)setText('#notice','正在执行…');
+    else setText('#notice',current.live?'执行已结束。':'');
     await Promise.all(['off','on'].map(async side=>{
       const lane=current.lanes[side];if(!lane?.directory)return;
       const key=JSON.stringify([lane.cursor,lane.result,lane.status]);
@@ -144,14 +143,14 @@ async function refresh(){
 async function history(){
   try{
     const all=await read('/api/demo');scenes.forEach(s=>s.records=all.scenes.find(r=>r.id===s.id)?.records||[]);busy=all.busy;renderControls();
-    const s=scene(),select=node('select');select.setAttribute('aria-label','选择本幕真实记录');
-    const first=node('option','选择一条已有记录');first.value='';select.append(first);
+    const s=scene(),select=node('select');select.setAttribute('aria-label','选择当前场景的记录');
+    const first=node('option','选择一条历史记录');first.value='';select.append(first);
     for(const [i,r] of s.records.entries()){
       const option=node('option',r.run+' · OFF '+(ui.outcomes[r.outcomes.off]||'缺少记录')+' / ON '+(ui.outcomes[r.outcomes.on]||'缺少记录'));option.value=String(i);select.append(option);
     }
     const load=node('button','打开这条记录');load.disabled=true;select.onchange=()=>load.disabled=select.value==='';
     load.onclick=()=>{const r=s.records[Number(select.value)];if(!r)return;generation++;active=newRecord(r.run,r.pair,false);saved.set(s.id,active);$('#dialog').close();render();refresh()};
-    modal('已有真实记录 · '+s.name,[node('p','选择后读取真实文件、收件和审查记录。画面会保留“非实时运行”标识。'),select,load,...(s.records.length?[]:[node('p','还没有本幕的记录。关闭后点击“运行这一幕”。')])]);
+    modal('历史记录 · '+s.name,[select,load,...(s.records.length?[]:[node('p','该场景暂无历史记录。')])]);
   }catch(e){setText('#notice','读取已有记录失败：'+e.message)}
 }
 function inputs(){
@@ -159,7 +158,7 @@ function inputs(){
   const content=[node('p',active?'以下来自当前记录的实际输入。':'以下是将同时送给两侧的合成任务资料。')];
   for(const name of s.files){content.push(node('h3',name),pre(active?(detail?.case?.files?.[name]??'当前记录尚未提供输入文件'):s.inputs[name]??'无文件内容'))}
   const raw=node('details');raw.append(node('summary','完整提示词与授权'),node('h3','原始提示词'),pre(active?(detail?.case?.task??'等待记录'):s.prompt),node('h3','宿主授权'),pre(active?(detail?.case?.authorizations??'等待记录'):s.authorizations));content.push(raw);
-  modal('本幕任务资料',content);
+  modal('任务资料',content);
 }
 function openEvidence(side,type){
   if(!active)return;
@@ -185,11 +184,11 @@ function environment(){
   content.push(node('p','OpenCode '+(value.environment?.opencode||'暂无版本记录')+' · AgentGuard '+(value.environment?.agentguard||'暂无版本记录')));
   const raw=node('details');raw.append(node('summary','隔离检查原始记录'),pre(JSON.stringify(value.environment,null,2)));content.push(raw);modal('本次隔离与接入证据',content);
 }
-function recording(enabled){document.body.classList.toggle('recording',enabled);if(enabled)window.scrollTo({top:0,behavior:'smooth'})}
+$('#fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{setText('#notice','当前浏览器不支持网页全屏，请在独立浏览器中打开演示页面。')}};
+document.addEventListener('fullscreenchange',()=>setText('#fullscreen',document.fullscreenElement?'退出全屏':'全屏'));
 $('#run').onclick=start;$('#next').onclick=()=>choose(index+1);$('#history').onclick=history;$('#inputs').onclick=inputs;$('#environment').onclick=environment;
 $('#stop').onclick=async()=>{try{await post('/api/stop',{});setText('#notice','已请求停止，正在保存已有记录。')}catch(e){setText('#notice',e.message)}};
-$('#recording').onclick=()=>recording(true);$('#exit-recording').onclick=()=>recording(false);$('#close-dialog').onclick=()=>$('#dialog').close();
-$('#native-help').onclick=()=>modal('原生 OpenCode 镜头',[node('p','四幕展示完成后，切换到已安装插件的真实 OpenCode 终端。'),node('h3','1 · 先录入口'),node('p','拍到原生底栏的 AgentGuard 状态，按 F6 切换，再输入 /guard 展示防护中心。'),node('h3','2 · 再录实际任务'),node('p','保持 ON，运行已配置的正常任务，拍到实际工具执行和报告。网页上的会话编号可在“隔离与接入证据”中核对。'),node('p','F6 切换防护，不负责开启操作系统沙箱；本页运行时会单独检查沙箱。')]);
-document.addEventListener('keydown',e=>{if($('#dialog').open||['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;if(e.key==='Escape')recording(false);if(e.key==='ArrowRight'){e.preventDefault();choose(index+1)}if(e.key==='ArrowLeft'){e.preventDefault();choose(index-1)}});
-async function init(){const data=await read('/api/demo');scenes=data.scenes;busy=data.busy;for(const [i,s] of scenes.entries()){const button=node('button');button.append(node('b',String(i+1).padStart(2,'0')),document.createTextNode(s.name));button.onclick=()=>choose(i);$('#chapters').append(button)}renderScene();if(busy)setText('#notice','服务已有任务运行中，结束后可开始本幕。');refreshTimer=setInterval(async()=>{if(active){await refresh();return}try{const s=await read('/api/demo/status');busy=s.busy;renderControls();if(!busy&&$('#notice').textContent.startsWith('服务已有'))setText('#notice','')}catch{}},1200)}
+$('#close-dialog').onclick=()=>$('#dialog').close();
+document.addEventListener('keydown',e=>{if($('#dialog').open||['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName))return;if(e.key==='ArrowRight'){e.preventDefault();choose(index+1)}if(e.key==='ArrowLeft'){e.preventDefault();choose(index-1)}});
+async function init(){const data=await read('/api/demo');scenes=data.scenes;busy=data.busy;for(const [i,s] of scenes.entries()){const button=node('button');button.append(node('b',String(i+1).padStart(2,'0')),document.createTextNode(s.name));button.onclick=()=>choose(i);$('#chapters').append(button)}renderScene();if(busy)setText('#notice','服务已有任务运行中，请等待结束。');refreshTimer=setInterval(async()=>{if(active){await refresh();return}try{const s=await read('/api/demo/status');busy=s.busy;renderControls();if(!busy&&$('#notice').textContent.startsWith('服务已有'))setText('#notice','')}catch{}},1200)}
 init().catch(e=>setText('#notice','无法加载演示：'+e.message));

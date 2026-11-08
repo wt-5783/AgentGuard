@@ -16,7 +16,7 @@ from .common import RuntimeFault, canonical, digest, new_id, strict_loads
 from .connect import private_write
 from .contracts import (BatchRequest, FinalizeRequest, HostInputRequest, Message,
     ModelOutputRequest, PrepareTurnRequest, ToolProposal, Usage, make)
-from .execution.executor import dispatch
+from .execution.executor import dispatch, KnownToolFailure
 from .state.lineage import public_labels
 
 
@@ -41,6 +41,7 @@ def native_instructions(request):
         'Native function names have prefix ag_ (for example manifest read_text is function ag_read_text). '
         'Released observations arrive in native function-result messages, followed by a host_tool_receipt naming the completed operation. '
         'Call native functions when work is needed; otherwise give a truthful plain-text final answer. '
+        'File paths belong to the declared host resource roots; /workspace is not an alias for another workspace. '
         'Do not invent execution results. Host catalog: ' + canonical(catalog) +
         ' Registered tool manifests: ' + canonical([m.model_dump(mode='json') for m in request.tool_manifests]))
 
@@ -502,8 +503,17 @@ class NativeController:
                 else:
                     results = []
                     for proposal in proposals:
-                        value = await dispatch(runtime.registry.get(proposal.tool_id).handler, proposal.args)
-                        results.append({'status': 'RELEASED', 'content': value, 'reason_code': 'DIRECT_BACKEND'})
+                        try:
+                            value = await dispatch(runtime.registry.get(proposal.tool_id).handler, proposal.args)
+                        except KnownToolFailure:
+                            # The trusted handler guarantees no effect occurred.
+                            # Return only a finite receipt, never backend error text.
+                            results.append({'status': 'FAILED_KNOWN', 'reason_code': 'TOOL_FAILED_BEFORE_EFFECT'})
+                        except Exception:
+                            # A possibly committed effect must never be retried.
+                            raise RuntimeFault('HOST_REVIEW_OR_EFFECT_PENDING') from None
+                        else:
+                            results.append({'status': 'RELEASED', 'content': value, 'reason_code': 'DIRECT_BACKEND'})
                 ui_calls, risks = [], []
                 for proposal, raw in zip(proposals, results):
                     result = raw.model_dump(mode='json') if hasattr(raw, 'model_dump') else raw
@@ -525,6 +535,9 @@ class NativeController:
                                 value if isinstance(value, str) else canonical(value), new_id('call')))
                             await self.feedback(state, {'type': 'host_tool_receipt', 'tool_id': proposal.tool_id,
                                 'status': 'RELEASED', 'args_digest': digest(proposal.args)})
+                    elif status == 'FAILED_KNOWN':
+                        await self.feedback(state, {'type': 'host_tool_receipt', 'tool_id': proposal.tool_id,
+                            'status': status, 'reason_code': reason, 'args_digest': digest(proposal.args)})
                     else:
                         state.blocked += 1
                         if state.mode == 'on':

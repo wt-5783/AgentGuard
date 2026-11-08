@@ -8,6 +8,14 @@
 
 切换保留当前 OpenCode 会话和聊天记录，从下一条输入生效，不新建或跳转会话；任务执行中不允许切换。其他会话保持各自模式，各窗口独立。切换前任务的执行记录和审计保持原样。用户级安装后，从主目录启动也能显示开关，工具仍绑定安装时配置的项目，不自动扩大到当前目录。
 
+### 两侧都失败时先核对路径
+
+`/workspace/source.txt`、`/workspace/reference.txt` 是隔离测评里的路径，只在相应沙箱中存在。普通 `opencode` 的真实工具目录以 `/guard` 中的「项目」为准；使用该目录下确实存在的文件，不要直接粘贴沙箱提示词。OFF 跳过 AgentGuard 审查，但不会创建缺失的文件，也不会移除工具自身的目录范围限制。
+
+已知的文件读取失败会返回 `FAILED_KNOWN / TOOL_FAILED_BEFORE_EFFECT`，允许模型改用可用资料，不计为安全拦截。效果不明的工具故障仍停止执行，避免重复副作用。安装更新后，重新打开 OpenCode 才会加载新代码。
+
+需要现成的 ON/OFF 注入对照时，使用下面的原生双窗口入口并选择 `injection`；它会创建与工具匹配的合成资料和 `prompt.txt`。
+
 **旧版 Ctrl+Shift+G 与 Kitty 的上条命令输出快捷键冲突，已移除。** 若旧窗口正在显示 `~` / `(END)`，按 q 退出 less，退出并重新启动 OpenCode 加载新版插件。
 
 本机普通窗口使用 `deepseek-flash` / thinking enabled / high；DeepSeek 官方当前将此 API ID 对应到 DeepSeek-V4.1-Flash-1017。供应商版本以官方接口为准：<https://api-docs.deepseek.com/quick_start/pricing/>。
